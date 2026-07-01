@@ -6,6 +6,7 @@ here <- tryCatch(dirname(sub("^--file=", "",
   grep("^--file=", commandArgs(FALSE), value = TRUE))), error = function(e) ".")
 if (!length(here) || !nzchar(here)) here <- "conformance"
 source(file.path(here, "..", "r", "okf", "R", "okf.R"))
+source(file.path(here, "..", "r", "okf", "R", "okf_diff.R"))
 
 fails <- character(0)
 chk <- function(name, got, want)
@@ -71,6 +72,28 @@ for (key in names(exw$resolutions)) {
   chk(paste0("wikilinks.", key), got, want)
 }
 DBI::dbDisconnect(rw$con, shutdown = TRUE)
+
+# diff (deterministic concept-level changelog between two bundle states)
+dd  <- okf_diff(file.path(here, "bundles", "diff_a"), file.path(here, "bundles", "diff_b"))
+exd <- jsonlite::fromJSON(file.path(here, "expected", "diff.json"))
+as_chr <- function(x) if (length(x)) as.character(unlist(x)) else character(0)
+key3 <- function(df) if (nrow(df)) paste(df[[1]], df[[2]], df[[3]], sep = "|") else character(0)
+key2 <- function(df) if (nrow(df)) paste(df[[1]], df[[2]], sep = "|") else character(0)
+chk("diff.identical",     dd$identical,          exd$identical)
+chk("diff.added",         dd$added,              as_chr(exd$added))
+chk("diff.removed",       dd$removed,            as_chr(exd$removed))
+chk("diff.changed",       dd$changed,            as_chr(exd$changed))
+chk("diff.type_changed",  key3(dd$type_changed), as_chr(exd$type_changed))
+chk("diff.retitled",      key3(dd$retitled),     as_chr(exd$retitled))
+chk("diff.links_added",   key2(dd$links_added),  as_chr(exd$links_added))
+chk("diff.links_removed", key2(dd$links_removed),as_chr(exd$links_removed))
+chk("diff.broken_added",  key2(dd$broken_added), as_chr(exd$broken_added))
+chk("diff.broken_fixed",  key2(dd$broken_fixed), as_chr(exd$broken_fixed))
+# drift mode: a catalog diffed against its own source directory is identical
+rdup <- okf_ingest(file.path(here, "bundles", "diff_a"))
+d0 <- okf_diff(rdup$con, file.path(here, "bundles", "diff_a"))
+chk("diff.drift_identical", d0$identical, TRUE)
+DBI::dbDisconnect(rdup$con, shutdown = TRUE)
 
 if (length(fails)) { cat("FAIL\n  ", paste(fails, collapse = "\n  "), "\n"); quit(status = 1) }
 cat("PASS — R binding conformant on all fixtures\n")

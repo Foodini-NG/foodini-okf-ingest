@@ -66,6 +66,26 @@ for key, want in expw["resolutions"].items():
     check(f"wikilinks.{key}", wl.get((src, raw)), want)
 conw.close()
 
+# --- diff (deterministic concept-level changelog between two bundle states) ---
+from okf.diff import diff as okf_diff  # noqa: E402
+dd = okf_diff(os.path.join(HERE, "bundles", "diff_a"), os.path.join(HERE, "bundles", "diff_b"))
+expd = json.load(open(os.path.join(HERE, "expected", "diff.json")))
+check("diff.identical", dd["identical"], expd["identical"])
+for k in ("added", "removed", "changed"):
+    check(f"diff.{k}", dd[k], expd[k])
+check("diff.type_changed", [f"{t['path']}|{t['from']}|{t['to']}" for t in dd["type_changed"]],
+      expd["type_changed"])
+check("diff.retitled", [f"{t['path']}|{t['from']}|{t['to']}" for t in dd["retitled"]],
+      expd["retitled"])
+for k, c2 in (("links_added", "dst_path"), ("links_removed", "dst_path"),
+              ("broken_added", "dst_raw"), ("broken_fixed", "dst_raw")):
+    check(f"diff.{k}", [f"{l['src_path']}|{l[c2]}" for l in dd[k]], expd[k])
+# drift mode: a catalog diffed against its own source directory is identical
+cond, _ = okf.ingest(os.path.join(HERE, "bundles", "diff_a"))
+d0 = okf_diff(cond, os.path.join(HERE, "bundles", "diff_a"))
+check("diff.drift_identical", d0["identical"], True)
+cond.close()
+
 if fails:
     print("FAIL\n  " + "\n  ".join(fails)); sys.exit(1)
 print("PASS — Python binding conformant on all fixtures")

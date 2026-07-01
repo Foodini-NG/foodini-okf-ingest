@@ -55,6 +55,36 @@ test_that("html render produces files when commonmark is available", {
   expect_true(file.exists(g))
 })
 
+test_that("okf_diff reports concept and graph deltas deterministically", {
+  a <- make_bundle()
+  b <- make_bundle()
+  # identical trees -> identical diff
+  d0 <- okf_diff(a, b)
+  expect_true(d0$identical)
+  # mutate b: change a body, change a type, retitle, add + remove a concept
+  writeLines(c("---", "type: Note", "title: A",
+               "timestamp: 2026-01-01T00:00:00Z", "description: first note", "---",
+               "# A", "see [B](sub/b.md) and [C](c.md)"), file.path(b, "a.md"))
+  writeLines(c("---", "type: Runbook", "title: B two", "description: second", "---",
+               "# B"), file.path(b, "sub", "b.md"))
+  writeLines(c("---", "type: Note", "title: C", "---", "# C"), file.path(b, "c.md"))
+  d <- okf_diff(a, b)
+  expect_false(d$identical)
+  expect_equal(d$added, "c.md")
+  expect_true("a.md" %in% d$changed)
+  expect_equal(d$type_changed$path, "sub/b.md")
+  expect_equal(d$type_changed$to, "Runbook")
+  expect_equal(d$retitled$from, "B")
+  expect_true(any(d$links_added$dst_path == "c.md"))
+  # drift mode: catalog vs its own source dir is identical
+  res <- okf_ingest(a)
+  on.exit(DBI::dbDisconnect(res$con, shutdown = TRUE))
+  expect_true(okf_diff(res$con, a)$identical)
+  # reversed sides swap added/removed
+  dr <- okf_diff(b, a)
+  expect_equal(dr$removed, "c.md")
+})
+
 test_that("wikilinks resolve by id / alias / title and markdown is unchanged", {
   d <- tempfile("okfw_"); dir.create(d)
   writeLines(c("---","type: Index","title: Home","---","# Home","- [A](a.md)"), file.path(d, "index.md"))

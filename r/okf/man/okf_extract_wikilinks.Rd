@@ -2,7 +2,7 @@
 % Please edit documentation in R/okf.R
 \name{okf_extract_wikilinks}
 \alias{okf_extract_wikilinks}
-\title{Extract \verb{[[wikilink]]} targets from a concept body.}
+\title{Extract `[[wikilink]]` targets from a concept body.}
 \usage{
 okf_extract_wikilinks(body)
 }
@@ -13,8 +13,8 @@ okf_extract_wikilinks(body)
 Character vector of raw wikilink references (as written).
 }
 \description{
-Supports \verb{[[target]]} and \verb{[[target|display]]}; strips the display text and
-any \verb{#anchor}, returning the reference as written. These are resolved by
+Supports `[[target]]` and `[[target|display]]`; strips the display text and
+any `#anchor`, returning the reference as written. These are resolved by
 name (id / alias / title / filename-stem) rather than by path -- see
 [okf_links()] -- so they work with Obsidian/Logseq/Foam-style vaults and stay
 valid across file renames.

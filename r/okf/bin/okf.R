@@ -12,6 +12,7 @@
 #   okf export   <bundle|db> [--json] [--mermaid]     # portable {nodes, edges} graph JSON, or a Mermaid diagram
 #   okf impact   <bundle|db> <concept>  [--json]      # inbound / outbound / transitive
 #   okf doctor   <bundle|db> [--strict] [--stale-days N] [--fix] [--json]  # health / maintenance
+#   okf diff     <a> <b> [--json]                     # concept-level changelog; each side a bundle dir or .duckdb
 #   okf embed    <db> [--model nomic-embed-text] [--incremental] [--json]
 #   okf rag      <db> --query "..." [-k 5] [--model nomic-embed-text] [--json]
 #
@@ -25,7 +26,7 @@ if (requireNamespace("okf", quietly = TRUE)) {
   suppressPackageStartupMessages(library(okf))           # installed package
 } else if (length(self) && nzchar(self)) {
   rdir <- file.path(normalizePath(file.path(dirname(self), ".."), mustWork = FALSE), "R")
-  for (f in c("okf.R", "okf_html.R", "okf_graph.R", "okf_doctor.R")) source(file.path(rdir, f))  # dev fallback
+  for (f in c("okf.R", "okf_html.R", "okf_graph.R", "okf_doctor.R", "okf_diff.R")) source(file.path(rdir, f))  # dev fallback
 } else stop("okf is not installed and the dev source could not be located")
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -192,6 +193,36 @@ if (cmd == "validate") {
   }
   ok <- rep$n_error == 0 && !(flag("--strict") && rep$n_warn > 0)
   quit(status = if (ok) 0 else 1)
+
+} else if (cmd == "diff") {
+  if (is.na(pos) || is.na(args[3])) { cat("diff: usage: okf diff <a> <b>  (each side a bundle dir or .duckdb catalog)\n"); quit(status = 2) }
+  d <- okf_diff(pos, args[3])
+  if (out_json) emit(d)
+  else {
+    s <- d$summary
+    cat(sprintf("diff %s -> %s\n", pos, args[3]))
+    cat(sprintf("concepts: +%d added / -%d removed / ~%d changed (%d unchanged), type-changed %d, retitled %d\n",
+                s$added, s$removed, s$changed, s$unchanged, s$type_changed, s$retitled))
+    for (p in d$added)   cat(sprintf("  + %s\n", p))
+    for (p in d$removed) cat(sprintf("  - %s\n", p))
+    for (p in d$changed) cat(sprintf("  ~ %s\n", p))
+    if (nrow(d$type_changed)) for (i in seq_len(nrow(d$type_changed)))
+      cat(sprintf("  ~ %s  type: %s -> %s\n", d$type_changed$path[i], d$type_changed$from[i], d$type_changed$to[i]))
+    if (nrow(d$retitled)) for (i in seq_len(nrow(d$retitled)))
+      cat(sprintf("  ~ %s  title: %s -> %s\n", d$retitled$path[i], d$retitled$from[i], d$retitled$to[i]))
+    cat(sprintf("links: +%d added / -%d removed, newly broken %d, fixed %d\n",
+                s$links_added, s$links_removed, s$broken_added, s$broken_fixed))
+    if (nrow(d$links_added)) for (i in seq_len(nrow(d$links_added)))
+      cat(sprintf("  + %s -> %s\n", d$links_added$src_path[i], d$links_added$dst_path[i]))
+    if (nrow(d$links_removed)) for (i in seq_len(nrow(d$links_removed)))
+      cat(sprintf("  - %s -> %s\n", d$links_removed$src_path[i], d$links_removed$dst_path[i]))
+    if (nrow(d$broken_added)) for (i in seq_len(nrow(d$broken_added)))
+      cat(sprintf("  ! %s -> %s (now broken)\n", d$broken_added$src_path[i], d$broken_added$dst_raw[i]))
+    if (nrow(d$broken_fixed)) for (i in seq_len(nrow(d$broken_fixed)))
+      cat(sprintf("  = %s -> %s (no longer broken)\n", d$broken_fixed$src_path[i], d$broken_fixed$dst_raw[i]))
+    if (d$identical) cat("identical: no differences\n")
+  }
+  quit(status = if (d$identical) 0 else 1)
 
 } else if (cmd == "embed") {
   if (is.na(pos)) usage()

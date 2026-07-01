@@ -30,5 +30,6 @@ conformant bundle you can ingest, render (`okf html` / `okf graph`), and check
 - [Semantic search](search.md) — the optional embed/rag layer
 - [Incremental](incremental.md) — re-ingest/re-embed only what changed
 - [Doctor](doctor.md) — health & maintenance
+- [Diff](diff.md) — drift & snapshot changelog
 
 See [the change log](log.md) for history.

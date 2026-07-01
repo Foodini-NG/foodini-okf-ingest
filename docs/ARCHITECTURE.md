@@ -58,6 +58,14 @@ generate summaries, entities, or claims itself.
 what changed; links and validation are always recomputed (cheap, graph-global).
 A full `ingest` is an idempotent replace of the bundle's rows.
 
+**Diff.** `okf_diff` / `diff` reuses the same `content_hash` for a
+*user-facing* changelog between any two bundle states (each side a directory,
+an `okf_read()` bundle, a `.duckdb` path, or an open connection): concepts
+added/removed/changed, `type`/`title` frontmatter changes, and edge/broken-link
+deltas. Pure hash/set comparison sorted by path — catalog-vs-dir is drift since
+last ingest; dir-vs-dir is a snapshot changelog. A dedicated conformance
+fixture (`bundles/diff_a` / `diff_b`) locks both bindings to the same output.
+
 `okf_html` is deliberately the thinnest of the three: it rewrites internal `.md`
 links to page-relative `.html` (site) or `#anchors` (single), wraps each concept
 in a metadata bar + validation-derived footer badge, and inlines one CSS string

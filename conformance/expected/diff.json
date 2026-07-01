@@ -1,0 +1,12 @@
+{
+  "identical": false,
+  "added": ["delta.md"],
+  "removed": ["gamma.md"],
+  "changed": ["beta.md", "index.md"],
+  "type_changed": ["alpha.md|Signal|Dataset"],
+  "retitled": ["beta.md|Beta|Beta v2"],
+  "links_added": ["beta.md|delta.md", "index.md|delta.md"],
+  "links_removed": ["index.md|gamma.md"],
+  "broken_added": ["beta.md|gone.md"],
+  "broken_fixed": ["gamma.md|missing.md"]
+}

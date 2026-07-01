@@ -9,8 +9,9 @@
   okf export   <bundle|db> [--json]                 # portable {nodes, edges} graph JSON
   okf impact   <bundle|db> <concept> [--json]       # inbound / outbound / transitive
   okf doctor   <bundle|db> [--strict] [--stale-days N] [--fix] [--json]  # health / maintenance
+  okf diff     <a> <b> [--json]                     # concept-level changelog; each side a bundle dir or .duckdb
 
-Exit codes: 0 ok · 1 conformance failure · 2 usage error.
+Exit codes: 0 ok · 1 conformance failure (for diff: differences found) · 2 usage error.
 """
 import argparse, json, os, sys
 
@@ -74,6 +75,9 @@ def main(argv=None):
     dr.add_argument("--strict", action="store_true"); dr.add_argument("--fix", action="store_true")
     dr.add_argument("--stale-days", type=int, default=None, dest="stale_days")
     dr.add_argument("--subdir"); dr.add_argument("--branch"); dr.add_argument("--json", action="store_true")
+
+    df = sub.add_parser("diff"); df.add_argument("a"); df.add_argument("b")
+    df.add_argument("--json", action="store_true")
 
     e = sub.add_parser("embed"); e.add_argument("db")
     e.add_argument("--model", default="nomic-embed-text")
@@ -238,6 +242,41 @@ def main(argv=None):
             for r, c in sorted(rep["by_rule"].items()):
                 print(f"  {r:<22} {c}")
         return 0 if (rep["n_error"] == 0 and not (a.strict and rep["n_warn"] > 0)) else 1
+
+    if a.cmd == "diff":
+        from okf.diff import diff as okf_diff
+        d = okf_diff(a.a, a.b)
+        if a.json:
+            print(json.dumps(d, indent=2))
+        else:
+            s = d["summary"]
+            print(f"diff {a.a} -> {a.b}")
+            print(f"concepts: +{s['added']} added / -{s['removed']} removed / "
+                  f"~{s['changed']} changed ({s['unchanged']} unchanged), "
+                  f"type-changed {s['type_changed']}, retitled {s['retitled']}")
+            for p in d["added"]:
+                print(f"  + {p}")
+            for p in d["removed"]:
+                print(f"  - {p}")
+            for p in d["changed"]:
+                print(f"  ~ {p}")
+            for t in d["type_changed"]:
+                print(f"  ~ {t['path']}  type: {t['from']} -> {t['to']}")
+            for t in d["retitled"]:
+                print(f"  ~ {t['path']}  title: {t['from']} -> {t['to']}")
+            print(f"links: +{s['links_added']} added / -{s['links_removed']} removed, "
+                  f"newly broken {s['broken_added']}, fixed {s['broken_fixed']}")
+            for l in d["links_added"]:
+                print(f"  + {l['src_path']} -> {l['dst_path']}")
+            for l in d["links_removed"]:
+                print(f"  - {l['src_path']} -> {l['dst_path']}")
+            for l in d["broken_added"]:
+                print(f"  ! {l['src_path']} -> {l['dst_raw']} (now broken)")
+            for l in d["broken_fixed"]:
+                print(f"  = {l['src_path']} -> {l['dst_raw']} (no longer broken)")
+            if d["identical"]:
+                print("identical: no differences")
+        return 0 if d["identical"] else 1
 
     if a.cmd == "embed":
         con = duckdb.connect(a.db)

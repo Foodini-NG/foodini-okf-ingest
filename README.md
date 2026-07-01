@@ -79,6 +79,7 @@ graph LR
   C --> H["html<br/>(site / single)"]
   C --> G["graph / export<br/>(interactive · JSON · Mermaid)"]
   C --> D["doctor<br/>(health · --fix)"]
+  C --> DF["diff<br/>(drift · snapshot changelog)"]
   C --> R["embed / rag<br/>(opt-in, local model)"]
 ```
 
@@ -244,6 +245,7 @@ catalog**:
 | Parse | `okf_read()` | `read_bundle()` | concepts (frontmatter + body) |
 | Lint / health | `okf_validate()` | `validate()` | the *same* findings `doctor` reports — broken links, orphans, missing fields, non-ISO timestamps |
 | Graph | `okf_links()` | `links()` | resolved + broken edges (markdown **and** `[[wikilinks]]`) |
+| Diff | `okf_diff(a, b)` | `diff(a, b)` | dir-vs-dir changelog (concepts, types, edges) — the catalog only enters if a side *is* one |
 
 ```r
 rd  <- okf_read("my-bundle")        # no DuckDB
@@ -279,6 +281,7 @@ okf html     <bundle|catalog> --out <dir> | --single <file.html> [--title T]    
 okf graph    <bundle|catalog> --out <file.html> [--title T]                     # interactive force-directed graph
 okf export   <bundle|catalog> [--json]                      # portable {nodes, edges} graph JSON
 okf impact   <bundle|catalog> <concept> [--json]            # inbound / outbound / transitive ripple
+okf diff     <a> <b> [--json]                               # concept-level changelog; each side a bundle dir or catalog
 okf embed    catalog.duckdb [--model nomic-embed-text] [--incremental]  # chunk + embed bodies for search
 okf rag      catalog.duckdb --query "…" [-k 5] [--model …]  # top-k semantic matches
 ```
@@ -367,6 +370,36 @@ Anything ambiguous is reported, never guessed (no LLM). Ready-made
 [`examples/github-action.yml`](examples/github-action.yml) wire it into your
 workflow so a bundle can't drift broken.
 
+### `diff` — what changed, as knowledge structure
+
+`git diff` shows text hunks; `okf diff` shows what changed as **knowledge
+structure**: concepts added / removed / changed (by `content_hash`),
+frontmatter `type`/`title` changes, and graph deltas — edges added/removed,
+links newly broken or fixed. Each side can be a bundle directory *or* an
+ingested `.duckdb` catalog, which gives you both shapes for free:
+
+```bash
+okf diff catalog.duckdb ./my-bundle     # DRIFT: what changed since the last ingest
+okf diff ./snapshot-old ./snapshot-new  # SNAPSHOT: changelog between two versions
+```
+
+```
+concepts: +1 added / -1 removed / ~2 changed (1 unchanged), type-changed 1, retitled 1
+  + delta.md
+  - gamma.md
+  ~ beta.md
+  ~ alpha.md  type: Signal -> Dataset
+links: +2 added / -1 removed, newly broken 1, fixed 1
+  ! beta.md -> gone.md (now broken)
+```
+
+Like everything in the core it's deterministic — pure hash/set comparison,
+output sorted by path, no model, no wall clock — and exits `0` when identical,
+`1` when different, so `okf diff` drops straight into CI as a change gate the
+same way `doctor` gates health. (Programmatic: `okf_diff(a, b)` in R,
+`okf.diff(a, b)` in Python; both also accept an open connection or an
+`okf_read()` bundle.)
+
 ### `[[wikilinks]]` & aliases
 
 Alongside markdown `](path.md)` links (resolved by path, unchanged), okf-ingest
@@ -418,8 +451,8 @@ py/okf/                 Python binding
 **Stable · lightly maintained.** The whole consume side is implemented,
 CLI-wrapped, and conformance-tested in both languages over one portable DuckDB
 catalog: **validate → ingest → query → context → render (`html` / `graph` /
-`export` `--mermaid`) → `impact` → `doctor`→ embed → rag**, with `--incremental`
-ingest/embed and dir/git/tar/zip sources. Packaged to
+`export` `--mermaid`) → `impact` → `doctor` → `diff` → embed → rag**, with
+`--incremental` ingest/embed and dir/git/tar/zip sources. Packaged to
 [PyPI](https://pypi.org/project/okf-ingest/) and
 [R-universe](https://travisjakel.r-universe.dev/okf).
 
