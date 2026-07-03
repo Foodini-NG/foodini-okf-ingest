@@ -55,6 +55,23 @@ test_that("html render produces files when commonmark is available", {
   expect_true(file.exists(g))
 })
 
+test_that("okf_rank is deterministic PPR and context can budget-fill by it", {
+  res <- okf_ingest(make_bundle()); con <- res$con
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  r1 <- okf_rank(con, "a.md", k = Inf)
+  r2 <- okf_rank(con, "a.md", k = Inf)
+  expect_identical(r1, r2)                       # deterministic
+  expect_equal(r1$path[1], "a.md")               # seed ranks first
+  expect_true(abs(sum(r1$score) - 1) < 1e-6)     # probability mass conserved
+  expect_true(all(diff(r1$score) <= 0))          # sorted descending
+  # unknown start errors
+  expect_error(okf_rank(con, "nope.md"), "not found")
+  # context rank="ppr" selects by score, excludes reserved, still respects budget
+  ctx <- okf_context(con, start = "a.md", rank = "ppr")
+  expect_equal(ctx$included[1], "a.md")
+  expect_false("index.md" %in% ctx$included[-1]) # reserved not in ranked selection
+})
+
 test_that("okf_diff reports concept and graph deltas deterministically", {
   a <- make_bundle()
   b <- make_bundle()

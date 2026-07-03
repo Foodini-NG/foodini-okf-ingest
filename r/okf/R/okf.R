@@ -563,13 +563,20 @@ okf_embed <- function(con, embedder = NULL, target_chars = 600L, incremental = F
 #'
 #' @param con An open DuckDB connection to an okf catalog.
 #' @param start Optional concept path to center the neighborhood on.
-#' @param depth Link-graph radius around `start` (ignored when `start` is NULL).
+#' @param depth Link-graph radius around `start` (ignored when `start` is NULL
+#'   or when `rank = "ppr"`).
 #' @param max_tokens Approximate output budget.
 #' @param include_index Prepend `index.md` (the map) when present.
+#' @param rank Neighborhood selection: `"bfs"` (default; everything within
+#'   `depth`, in discovery order) or `"ppr"` (rank the whole graph by
+#'   Personalized PageRank from `start` via [okf_rank()] and budget-fill by
+#'   relevance -- hubs no longer drown out the pages that matter).
 #' @return A list with `text` (the markdown blob), `included`/`omitted` concept
 #'   paths, and `est_tokens`.
 #' @export
-okf_context <- function(con, start = NULL, depth = 1L, max_tokens = 8000L, include_index = TRUE) {
+okf_context <- function(con, start = NULL, depth = 1L, max_tokens = 8000L,
+                        include_index = TRUE, rank = c("bfs", "ppr")) {
+  rank <- match.arg(rank)
   cps <- DBI::dbGetQuery(con, "SELECT path, reserved, title, body FROM okf_concept")
   lks <- DBI::dbGetQuery(con, "SELECT src_path, dst_path FROM okf_link WHERE resolved")
   nonres <- cps$path[!as.logical(cps$reserved)]
@@ -582,12 +589,17 @@ okf_context <- function(con, start = NULL, depth = 1L, max_tokens = 8000L, inclu
 
   if (!is.null(start)) {
     if (!(start %in% cps$path)) stop("start concept not found: ", start)
-    sel <- start; seen <- start; frontier <- start; d <- 0L
-    while (d < depth && length(frontier)) {
-      nb <- setdiff(unique(unlist(adj[frontier])), seen)
-      sel <- c(sel, nb); seen <- c(seen, nb); frontier <- nb; d <- d + 1L
+    if (rank == "ppr") {
+      r <- okf_rank(con, start, k = Inf)
+      sel <- r$path[r$path %in% nonres]
+    } else {
+      sel <- start; seen <- start; frontier <- start; d <- 0L
+      while (d < depth && length(frontier)) {
+        nb <- setdiff(unique(unlist(adj[frontier])), seen)
+        sel <- c(sel, nb); seen <- c(seen, nb); frontier <- nb; d <- d + 1L
+      }
+      sel <- sel[sel %in% nonres]
     }
-    sel <- sel[sel %in% nonres]
   } else sel <- sort(nonres)
 
   est <- function(s) ceiling(nchar(s) / 4)

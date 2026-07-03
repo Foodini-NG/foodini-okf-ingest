@@ -80,6 +80,7 @@ graph LR
   C --> G["graph / export<br/>(interactive · JSON · Mermaid)"]
   C --> D["doctor<br/>(health · --fix)"]
   C --> DF["diff<br/>(drift · snapshot changelog)"]
+  C --> RK["rank<br/>(Personalized PageRank)"]
   C --> R["embed / rag<br/>(opt-in, local model)"]
 ```
 
@@ -281,6 +282,7 @@ okf html     <bundle|catalog> --out <dir> | --single <file.html> [--title T]    
 okf graph    <bundle|catalog> --out <file.html> [--title T]                     # interactive force-directed graph
 okf export   <bundle|catalog> [--json]                      # portable {nodes, edges} graph JSON
 okf impact   <bundle|catalog> <concept> [--json]            # inbound / outbound / transitive ripple
+okf rank     <bundle|catalog> <concept> [-k N]              # Personalized PageRank relevance to a concept
 okf diff     <a> <b> [--json]                               # concept-level changelog; each side a bundle dir or catalog
 okf embed    catalog.duckdb [--model nomic-embed-text] [--incremental]  # chunk + embed bodies for search
 okf rag      catalog.duckdb --query "…" [-k 5] [--model …]  # top-k semantic matches
@@ -370,6 +372,25 @@ Anything ambiguous is reported, never guessed (no LLM). Ready-made
 [`examples/github-action.yml`](examples/github-action.yml) wire it into your
 workflow so a bundle can't drift broken.
 
+### `rank` — relevance, from the graph the author wrote
+
+`okf rank` scores every concept's relevance to a start concept with
+**Personalized PageRank** — computed by *exact power iteration*, not
+Monte-Carlo sampling, so it is fully deterministic like everything else here.
+No embeddings, no model: the signal is the link structure the bundle's author
+already encoded.
+
+```bash
+okf rank ./my-bundle orders.md            # what matters most to orders.md, ranked
+okf context ./my-bundle --start orders.md --rank ppr   # budget-fill context by relevance
+```
+
+`context --rank ppr` upgrades neighborhood selection from BFS ("everything at
+depth 1 is equal") to relevance-weighted — on hub-heavy wikis the pages that
+actually matter to the topic fill the token budget first instead of whatever
+the hub happens to link. A conformance fixture locks R and Python to
+byte-identical scores. (Programmatic: `okf_rank()` / `okf.graph.ppr()`.)
+
 ### `diff` — what changed, as knowledge structure
 
 `git diff` shows text hunks; `okf diff` shows what changed as **knowledge
@@ -451,7 +472,7 @@ py/okf/                 Python binding
 **Stable · lightly maintained.** The whole consume side is implemented,
 CLI-wrapped, and conformance-tested in both languages over one portable DuckDB
 catalog: **validate → ingest → query → context → render (`html` / `graph` /
-`export` `--mermaid`) → `impact` → `doctor` → `diff` → embed → rag**, with
+`export` `--mermaid`) → `impact` → `rank` → `doctor` → `diff` → embed → rag**, with
 `--incremental` ingest/embed and dir/git/tar/zip sources. Packaged to
 [PyPI](https://pypi.org/project/okf-ingest/) and
 [R-universe](https://travisjakel.r-universe.dev/okf).

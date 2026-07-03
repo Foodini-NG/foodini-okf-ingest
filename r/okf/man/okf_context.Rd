@@ -10,7 +10,8 @@ okf_context(
   start = NULL,
   depth = 1L,
   max_tokens = 8000L,
-  include_index = TRUE
+  include_index = TRUE,
+  rank = c("bfs", "ppr")
 )
 }
 \arguments{
@@ -18,11 +19,17 @@ okf_context(
 
 \item{start}{Optional concept path to center the neighborhood on.}
 
-\item{depth}{Link-graph radius around `start` (ignored when `start` is NULL).}
+\item{depth}{Link-graph radius around `start` (ignored when `start` is NULL
+or when `rank = "ppr"`).}
 
 \item{max_tokens}{Approximate output budget.}
 
 \item{include_index}{Prepend `index.md` (the map) when present.}
+
+\item{rank}{Neighborhood selection: `"bfs"` (default; everything within
+`depth`, in discovery order) or `"ppr"` (rank the whole graph by
+Personalized PageRank from `start` via [okf_rank()] and budget-fill by
+relevance -- hubs no longer drown out the pages that matter).}
 }
 \value{
 A list with `text` (the markdown blob), `included`/`omitted` concept

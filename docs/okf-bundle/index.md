@@ -31,5 +31,6 @@ conformant bundle you can ingest, render (`okf html` / `okf graph`), and check
 - [Incremental](incremental.md) — re-ingest/re-embed only what changed
 - [Doctor](doctor.md) — health & maintenance
 - [Diff](diff.md) — drift & snapshot changelog
+- [Rank](rank.md) — Personalized PageRank relevance (exact, deterministic)
 
 See [the change log](log.md) for history.

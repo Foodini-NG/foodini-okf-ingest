@@ -58,6 +58,14 @@ generate summaries, entities, or claims itself.
 what changed; links and validation are always recomputed (cheap, graph-global).
 A full `ingest` is an idempotent replace of the bundle's rows.
 
+**Rank.** `okf_rank` / `ppr` is exact power-iteration Personalized PageRank
+over the undirected resolved-link graph (teleport + dangling mass to the
+seed) — deterministic where the usual Monte-Carlo PPR is not, and parity-locked
+across bindings by a conformance fixture (scores to 10 decimals; Python
+iterates edges in sorted order so floating-point accumulation matches R's
+grouped sums). `context(rank = "ppr")` consumes it for relevance-weighted
+budget-filling.
+
 **Diff.** `okf_diff` / `diff` reuses the same `content_hash` for a
 *user-facing* changelog between any two bundle states (each side a directory,
 an `okf_read()` bundle, a `.duckdb` path, or an open connection): concepts

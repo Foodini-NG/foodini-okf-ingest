@@ -66,6 +66,15 @@ for key, want in expw["resolutions"].items():
     check(f"wikilinks.{key}", wl.get((src, raw)), want)
 conw.close()
 
+# --- rank (Personalized PageRank: exact, deterministic, parity-locked) ---
+from okf.graph import ppr as okf_ppr  # noqa: E402
+conr, _ = okf.ingest(os.path.join(HERE, "bundles", "store"))
+expr = json.load(open(os.path.join(HERE, "expected", "rank.json")))
+got_rank = [{"path": r["path"], "score": round(r["score"], 8)}
+            for r in okf_ppr(conr, expr["start"], damping=expr["damping"], k=10)]
+check("rank.ranking", got_rank, expr["ranking"])
+conr.close()
+
 # --- diff (deterministic concept-level changelog between two bundle states) ---
 from okf.diff import diff as okf_diff  # noqa: E402
 dd = okf_diff(os.path.join(HERE, "bundles", "diff_a"), os.path.join(HERE, "bundles", "diff_b"))

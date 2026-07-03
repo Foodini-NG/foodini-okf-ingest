@@ -1,3 +1,15 @@
+# okf 0.8.0
+
+* New `okf_rank()`: Personalized PageRank relevance scores over the concept
+  graph, seeded on a start concept — exact power iteration (deterministic, no
+  sampling, no embeddings), undirected resolved-link graph, teleport and
+  dangling mass returning to the seed. New CLI verb `rank`.
+* `okf_context(rank = "ppr")`: budget-fill the context blob by PPR relevance
+  instead of BFS discovery order, so hub-heavy bundles surface the pages that
+  matter to the topic first. Default behavior unchanged (`rank = "bfs"`).
+* Cross-language parity: a new conformance fixture locks R and Python PPR
+  scores byte-identical (10 decimals).
+
 # okf 0.7.0
 
 * New `okf_diff()`: deterministic concept-level changelog between two states

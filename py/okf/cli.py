@@ -10,6 +10,7 @@
   okf impact   <bundle|db> <concept> [--json]       # inbound / outbound / transitive
   okf doctor   <bundle|db> [--strict] [--stale-days N] [--fix] [--json]  # health / maintenance
   okf diff     <a> <b> [--json]                     # concept-level changelog; each side a bundle dir or .duckdb
+  okf rank     <bundle|db> <concept> [-k N] [--json]  # Personalized PageRank relevance to a concept
 
 Exit codes: 0 ok · 1 conformance failure (for diff: differences found) · 2 usage error.
 """
@@ -53,6 +54,7 @@ def main(argv=None):
     c.add_argument("--start"); c.add_argument("--depth", type=int, default=1)
     c.add_argument("--max-tokens", type=int, default=8000, dest="max_tokens")
     c.add_argument("--no-index", action="store_true")
+    c.add_argument("--rank", default="bfs", choices=["bfs", "ppr"])
     c.add_argument("--subdir"); c.add_argument("--branch")
 
     h = sub.add_parser("html"); h.add_argument("source")
@@ -78,6 +80,10 @@ def main(argv=None):
 
     df = sub.add_parser("diff"); df.add_argument("a"); df.add_argument("b")
     df.add_argument("--json", action="store_true")
+
+    rk = sub.add_parser("rank"); rk.add_argument("source"); rk.add_argument("concept")
+    rk.add_argument("-k", type=int, default=20)
+    rk.add_argument("--subdir"); rk.add_argument("--branch"); rk.add_argument("--json", action="store_true")
 
     e = sub.add_parser("embed"); e.add_argument("db")
     e.add_argument("--model", default="nomic-embed-text")
@@ -155,7 +161,8 @@ def main(argv=None):
             con, _ = okf.ingest(a.source, subdir=a.subdir, branch=a.branch); close = con.close
         try:
             ctx = okf.context(con, start=a.start, depth=a.depth,
-                              max_tokens=a.max_tokens, include_index=not a.no_index)
+                              max_tokens=a.max_tokens, include_index=not a.no_index,
+                              rank=a.rank)
         finally:
             close()
         sys.stdout.write(ctx["text"])
@@ -242,6 +249,20 @@ def main(argv=None):
             for r, c in sorted(rep["by_rule"].items()):
                 print(f"  {r:<22} {c}")
         return 0 if (rep["n_error"] == 0 and not (a.strict and rep["n_warn"] > 0)) else 1
+
+    if a.cmd == "rank":
+        from okf.graph import ppr
+        con = _open(a.source, a.subdir, a.branch)
+        try:
+            rows = ppr(con, a.concept, k=a.k)
+        finally:
+            con.close()
+        if a.json:
+            print(json.dumps(rows, indent=2))
+        else:
+            for r in rows:
+                print(f"{r['score']:.10f} {r['path']}" + (" (reserved)" if r["reserved"] else ""))
+        return 0
 
     if a.cmd == "diff":
         from okf.diff import diff as okf_diff

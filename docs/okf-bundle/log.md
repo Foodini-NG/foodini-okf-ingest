@@ -18,3 +18,7 @@ tags: [log]
   conformance fixture locks R/Python parity. Prompted by reviewing
   matrixorigin/Memoria's `memory_diff` — the one idea there with a clean
   file-native analog.
+- **2026-07-02** 0.8.0 — `okf rank`: exact power-iteration Personalized
+  PageRank over the concept graph (deterministic, parity-locked); `context
+  --rank ppr` budget-fills by relevance. Idea credit: the Obsidian Karpathy
+  LLM Wiki plugin's Monte-Carlo PPR retrieval — made exact here.

@@ -469,7 +469,22 @@ def search(con, term: str):
         [f"%{term}%"]).fetchall()
 
 
-def context(con, start=None, depth: int = 1, max_tokens: int = 8000, include_index: bool = True):
+def _bfs_select(cps, adj, nonres, start, depth):
+    sel, seen, frontier, dd = [start], {start}, [start], 0
+    while dd < depth and frontier:
+        nxt = []
+        for p in frontier:
+            for nb in adj.get(p, ()):  # noqa: B007
+                if nb not in seen:
+                    seen.add(nb)
+                    nxt.append(nb)
+        sel += nxt
+        frontier = nxt
+        dd += 1
+    return [p for p in sel if p in nonres]
+
+
+def context(con, start=None, depth: int = 1, max_tokens: int = 8000, include_index: bool = True, rank: str = "bfs"):
     """Assemble an index-first, link-following slice of a bundle as one markdown
     blob for direct LLM consumption — the OKF / "LLM wiki" consume primitive.
     Uses the concept graph (no embeddings, no vector search). With `start`, walks
@@ -487,15 +502,11 @@ def context(con, start=None, depth: int = 1, max_tokens: int = 8000, include_ind
     if start is not None:
         if start not in cps:
             raise ValueError(f"start concept not found: {start}")
-        sel, seen, frontier, dd = [start], {start}, [start], 0
-        while dd < depth and frontier:
-            nxt = []
-            for p in frontier:
-                for n in adj.get(p, ()):
-                    if n not in seen:
-                        seen.add(n); nxt.append(n)
-            sel += nxt; frontier = nxt; dd += 1
-        sel = [p for p in sel if p in nonres]
+        if rank == "ppr":
+            from .graph import ppr as _ppr
+            sel = [r["path"] for r in _ppr(con, start, k=None) if r["path"] in nonres]
+        else:
+            sel = _bfs_select(cps, adj, nonres, start, depth)
     else:
         sel = sorted(nonres)
 

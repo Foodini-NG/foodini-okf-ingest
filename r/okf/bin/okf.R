@@ -6,13 +6,14 @@
 #   okf ingest   <bundle|git-url|tar/zip> --db <path> [--id <id>] [--subdir <p>] [--branch <b>] [--incremental] [--json]
 #   okf query    <db> [--sql "SELECT ..."] [--search <term>]
 #                     [--concepts] [--links] [--findings] [--json]
-#   okf context  <bundle|db> [--start <path>] [--depth N] [--max-tokens N] [--no-index]
+#   okf context  <bundle|db> [--start <path>] [--depth N] [--max-tokens N] [--no-index] [--rank ppr]
 #   okf html     <bundle|db> --out <dir> | --single <file.html> [--title T]
 #   okf graph    <bundle|db> --out <file.html> [--title T]
 #   okf export   <bundle|db> [--json] [--mermaid]     # portable {nodes, edges} graph JSON, or a Mermaid diagram
 #   okf impact   <bundle|db> <concept>  [--json]      # inbound / outbound / transitive
 #   okf doctor   <bundle|db> [--strict] [--stale-days N] [--fix] [--json]  # health / maintenance
 #   okf diff     <a> <b> [--json]                     # concept-level changelog; each side a bundle dir or .duckdb
+#   okf rank     <bundle|db> <concept> [-k N] [--json]  # Personalized PageRank relevance to a concept
 #   okf embed    <db> [--model nomic-embed-text] [--incremental] [--json]
 #   okf rag      <db> --query "..." [-k 5] [--model nomic-embed-text] [--json]
 #
@@ -26,7 +27,7 @@ if (requireNamespace("okf", quietly = TRUE)) {
   suppressPackageStartupMessages(library(okf))           # installed package
 } else if (length(self) && nzchar(self)) {
   rdir <- file.path(normalizePath(file.path(dirname(self), ".."), mustWork = FALSE), "R")
-  for (f in c("okf.R", "okf_html.R", "okf_graph.R", "okf_doctor.R", "okf_diff.R")) source(file.path(rdir, f))  # dev fallback
+  for (f in c("okf.R", "okf_html.R", "okf_graph.R", "okf_doctor.R", "okf_diff.R", "okf_rank.R")) source(file.path(rdir, f))  # dev fallback
 } else stop("okf is not installed and the dev source could not be located")
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -112,7 +113,8 @@ if (cmd == "validate") {
   ctx <- okf_context(con, start = optval("--start"),
                      depth = as.integer(optval("--depth", "1")),
                      max_tokens = as.integer(optval("--max-tokens", "8000")),
-                     include_index = !flag("--no-index"))
+                     include_index = !flag("--no-index"),
+                     rank = optval("--rank", "bfs"))
   cat(ctx$text)
   cat(sprintf("\n<!-- okf context: %d concepts, ~%d tokens, %d omitted -->\n",
               length(ctx$included), ctx$est_tokens, length(ctx$omitted)), file = stderr())
@@ -193,6 +195,18 @@ if (cmd == "validate") {
   }
   ok <- rep$n_error == 0 && !(flag("--strict") && rep$n_warn > 0)
   quit(status = if (ok) 0 else 1)
+
+} else if (cmd == "rank") {
+  if (is.na(pos) || is.na(args[3])) { cat("rank: usage: okf rank <bundle|db> <concept> [-k N]\n"); quit(status = 2) }
+  if (grepl("\\.duckdb$", pos) && file.exists(pos)) {
+    con <- DBI::dbConnect(duckdb::duckdb(), dbdir = pos, read_only = TRUE)
+  } else { res <- okf_ingest(pos, subdir = optval("--subdir"), branch = optval("--branch")); con <- res$con }
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  rk <- okf_rank(con, args[3], k = as.integer(optval("-k", "20")))
+  if (out_json) emit(rk)
+  else for (i in seq_len(nrow(rk)))
+    cat(sprintf("%.10f %s%s\n", rk$score[i], rk$path[i], if (rk$reserved[i]) " (reserved)" else ""))
+  quit(status = 0)
 
 } else if (cmd == "diff") {
   if (is.na(pos) || is.na(args[3])) { cat("diff: usage: okf diff <a> <b>  (each side a bundle dir or .duckdb catalog)\n"); quit(status = 2) }

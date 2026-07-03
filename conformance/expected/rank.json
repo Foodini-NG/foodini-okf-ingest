@@ -1,0 +1,22 @@
+{
+  "start": "orders.md",
+  "damping": 0.85,
+  "ranking": [
+    {
+      "path": "orders.md",
+      "score": 0.37759049
+    },
+    {
+      "path": "index.md",
+      "score": 0.26070738
+    },
+    {
+      "path": "customers.md",
+      "score": 0.18085106
+    },
+    {
+      "path": "metrics/revenue.md",
+      "score": 0.18085106
+    }
+  ]
+}

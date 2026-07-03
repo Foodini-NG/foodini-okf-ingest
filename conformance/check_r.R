@@ -73,6 +73,15 @@ for (key in names(exw$resolutions)) {
 }
 DBI::dbDisconnect(rw$con, shutdown = TRUE)
 
+# rank (Personalized PageRank: exact, deterministic, parity-locked)
+source(file.path(here, "..", "r", "okf", "R", "okf_rank.R"))
+rr  <- okf_ingest(file.path(here, "bundles", "store"))
+exr <- jsonlite::fromJSON(file.path(here, "expected", "rank.json"))
+gotr <- okf_rank(rr$con, exr$start, damping = exr$damping, k = 10)
+chk("rank.paths",  gotr$path,                exr$ranking$path)
+chk("rank.scores", round(gotr$score, 8),     exr$ranking$score)
+DBI::dbDisconnect(rr$con, shutdown = TRUE)
+
 # diff (deterministic concept-level changelog between two bundle states)
 dd  <- okf_diff(file.path(here, "bundles", "diff_a"), file.path(here, "bundles", "diff_b"))
 exd <- jsonlite::fromJSON(file.path(here, "expected", "diff.json"))

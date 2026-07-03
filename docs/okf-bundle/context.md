@@ -17,3 +17,6 @@ This is okf's answer to "let an LLM use my knowledge": [compose with the
 agent](determinism.md), don't embed one. For small, curated bundles it beats
 [semantic search](search.md) — the explicit links cost nothing and the author's
 structure is better than fuzzy matches. See the [CLI](cli.md).
+
+With `--rank ppr`, selection is relevance-weighted by [rank](rank.md)
+instead of BFS discovery order.

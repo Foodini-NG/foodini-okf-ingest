@@ -139,6 +139,60 @@ def graph_mermaid(con) -> str:
     return "\n".join(lines)
 
 
+def ppr(con, start: str, damping: float = 0.85, tol: float = 1e-12,
+        max_iter: int = 200, k: int = 20) -> list:
+    """Personalized PageRank scores for the concept graph, seeded at `start`.
+
+    EXACT power iteration (no Monte-Carlo sampling) over the UNDIRECTED
+    resolved-link graph, with teleport (probability 1-damping) and dangling
+    mass returning to `start` -- deterministic: same bundle + start always
+    yields the same scores. Reserved pages participate in the walk (they carry
+    real link structure); callers may filter them. Returns the top `k` rows
+    as dicts of path/score/title/reserved, score descending, ties by path.
+    Mirrors r/okf/R/okf_rank.R::okf_rank.
+    """
+    cps = con.execute(
+        "SELECT path, title, reserved FROM okf_concept ORDER BY path").fetchall()
+    lks = con.execute(
+        "SELECT DISTINCT src_path, dst_path FROM okf_link WHERE resolved").fetchall()
+    nodes = [r[0] for r in cps]
+    if start not in nodes:
+        raise ValueError(f"start concept not found: {start}")
+    n = len(nodes)
+    idx = {p_: i for i, p_ in enumerate(nodes)}
+
+    edges = set()
+    for s_, d_ in lks:
+        if s_ != d_ and s_ in idx and d_ in idx:
+            edges.add((idx[s_], idx[d_]))
+            edges.add((idx[d_], idx[s_]))
+    deg = [0] * n
+    for s_i, _ in edges:
+        deg[s_i] += 1
+
+    seed = [0.0] * n
+    seed[idx[start]] = 1.0
+    p_vec = seed[:]
+    for _ in range(max_iter):
+        contrib = [0.0] * n
+        for s_i, d_i in sorted(edges):          # fixed order -> deterministic fp
+            if p_vec[s_i]:
+                contrib[d_i] += p_vec[s_i] / deg[s_i]
+        dangling = sum(p_vec[i] for i in range(n) if deg[i] == 0)
+        np_ = [(1 - damping) * seed[i] + damping * (contrib[i] + dangling * seed[i])
+               for i in range(n)]
+        if sum(abs(np_[i] - p_vec[i]) for i in range(n)) < tol:
+            p_vec = np_
+            break
+        p_vec = np_
+
+    rows = [{"path": nodes[i], "score": round(p_vec[i], 10),
+             "title": cps[i][1], "reserved": bool(cps[i][2])}
+            for i in range(n) if round(p_vec[i], 10) > 0]
+    rows.sort(key=lambda r: (-r["score"], r["path"]))
+    return rows[:k] if k else rows
+
+
 def graph_html(con, out: str, site_title: Optional[str] = None) -> str:
     """Render the concept graph as one self-contained interactive HTML page — a
     force-directed canvas (hand-rolled vanilla JS, no CDN): pan, zoom, drag,
