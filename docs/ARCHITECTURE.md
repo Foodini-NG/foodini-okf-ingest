@@ -64,7 +64,13 @@ seed) — deterministic where the usual Monte-Carlo PPR is not, and parity-locke
 across bindings by a conformance fixture (scores to 10 decimals; Python
 iterates edges in sorted order so floating-point accumulation matches R's
 grouped sums). `context(rank = "ppr")` consumes it for relevance-weighted
-budget-filling.
+budget-filling. Free-text queries chain `okf_seeds` (deterministic lexical
+scoring: +3 title / +2 description-or-tags / +1 body per token, fixed
+stopword list mirrored across bindings) into multi-seed PPR -- the full
+lexical -> seeds -> walk cascade with no embeddings. Doctor findings carry a
+third `info` severity (e.g. `hub_concentration`) that reports without
+affecting the health score; `reviewed: true` pages are exempt from
+`doctor --fix`.
 
 **Diff.** `okf_diff` / `diff` reuses the same `content_hash` for a
 *user-facing* changelog between any two bundle states (each side a directory,

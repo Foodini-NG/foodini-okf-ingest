@@ -19,4 +19,6 @@ agent](determinism.md), don't embed one. For small, curated bundles it beats
 structure is better than fuzzy matches. See the [CLI](cli.md).
 
 With `--rank ppr`, selection is relevance-weighted by [rank](rank.md)
-instead of BFS discovery order.
+instead of BFS discovery order. With `--query "..."` you skip choosing a
+start concept entirely: lexical seeds feed multi-seed PPR -- deterministic
+hybrid retrieval, no embeddings.

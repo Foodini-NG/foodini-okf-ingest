@@ -1,21 +1,23 @@
-## Update: 0.5.2 -> 0.7.0
+## Update: 0.7.0 -> 0.9.0
 
-This is the first update after the initial CRAN acceptance (0.5.2). The gap
-reflects development that completed while 0.5.2 was in the submission queue:
+Second update; consolidates two additive releases (see NEWS.md):
 
-* 0.6.0 — `[[wikilink]]` reference resolution (id/alias/title/stem), so
-  Obsidian-style vaults are ingestible; new `okf_extract_wikilinks()`.
-* 0.7.0 — `okf_diff()`, a deterministic concept-level changelog between two
-  bundle states (drift vs an ingested catalog, or snapshot vs snapshot).
+* 0.8.0 — `okf_rank()`: Personalized PageRank relevance over the concept
+  graph, computed by exact power iteration (deterministic); `okf_context()`
+  gains `rank = "ppr"` for relevance-weighted context assembly.
+* 0.9.0 — `okf_seeds()` + multi-seed ranking: `okf_context(query = ...)`
+  serves free-text queries via deterministic lexical seeding; `okf_doctor()`
+  gains duplicate-identity and (info-severity) hub-concentration checks;
+  `reviewed: true` pages are protected from `okf_doctor_fix()`.
 
-No API changes or removals; both releases are additive. See NEWS.md.
+No API changes or removals; all additive and offline (no new dependencies).
 
 ## R CMD check results
 
 0 errors | 0 warnings | 1 note
 
-* The only NOTE is "Days since last update" — explained above (features were
-  finished during the initial submission's review window).
+* The only NOTE is "Days since last update" — the releases are additive and
+  were completed together; consolidated here into one submission.
 
 ## Test environments
 

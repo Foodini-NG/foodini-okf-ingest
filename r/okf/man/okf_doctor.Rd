@@ -18,13 +18,16 @@ this many days.}
 }
 \value{
 A list with `score`, `n_concepts`, `n_healthy`, `n_error`, `n_warn`,
-  `by_rule` (named counts), and `issues` (a data.frame of path/severity/rule/
-  message).
+  `n_info`, `by_rule` (named counts), and `issues` (a data.frame of
+  path/severity/rule/message; severity is `error`, `warn`, or `info`).
 }
 \description{
 Combines the validation findings already stored in the catalog (missing type,
-broken links, orphans, non-ISO timestamps, ...) with maintenance checks
-(duplicate titles; and, when `now` is supplied, future/stale timestamps), and
-computes a health `score` = the percentage of non-reserved concepts with zero
-findings. Fully deterministic.
+broken links, orphans, non-ISO timestamps, ...) with maintenance checks:
+duplicate titles; duplicate identity (the same normalized id/alias claimed
+by more than one concept -- breaks by-name/wikilink resolution); hub
+concentration (info severity: pages whose outbound links mostly point at
+high in-degree hubs); and, when `now` is supplied, future/stale timestamps.
+Health `score` = the percentage of non-reserved concepts with zero
+error/warn findings -- `info` findings never affect it. Fully deterministic.
 }

@@ -18,9 +18,12 @@ _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 def doctor(con, now: Optional[str] = None, stale_days: Optional[int] = None) -> dict:
     """Health/maintenance report. Combines catalog validation findings with
-    maintenance checks (duplicate titles; future/stale timestamps when `now` is
-    given). Health `score` = percent of non-reserved concepts with zero findings.
-    Returns a dict: score, n_concepts, n_healthy, n_error, n_warn, by_rule, issues."""
+    maintenance checks: duplicate titles; duplicate identity (same normalized
+    id/alias claimed by >1 concept); hub concentration (info severity); and
+    future/stale timestamps when `now` is given. Health `score` = percent of
+    non-reserved concepts with zero error/warn findings (info never affects
+    it). Returns: score, n_concepts, n_healthy, n_error, n_warn, n_info,
+    by_rule, issues."""
     cps = con.execute(
         "SELECT path, reserved, title, timestamp FROM okf_concept ORDER BY path").fetchall()
     nonres = [r for r in cps if not r[1]]
@@ -141,7 +144,8 @@ def _to_iso(s: str) -> Optional[str]:
 def doctor_fix(root: str) -> list:
     """Apply only unambiguously-safe maintenance fixes to a bundle's files:
     normalize a parseable non-ISO `timestamp:`; re-point a broken link whose
-    basename matches exactly one concept. Edits in place; returns a list of
+    basename matches exactly one concept. Pages with `reviewed: true` are
+    human-validated and never modified. Edits in place; returns a list of
     {path, kind, before, after}. Ambiguous cases are left for `doctor` to report."""
     b = _okf.read_bundle(root)
     lk = _okf.links(b)

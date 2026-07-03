@@ -20,5 +20,7 @@ Two mechanical, deterministic repairs (never invents content):
   \item **moved links** -- a broken link whose basename matches *exactly one*
     concept is re-pointed to that concept (relative to the linking file).
 }
-Edits files in place. Anything ambiguous is left for [okf_doctor()] to report.
+Edits files in place. Anything ambiguous is left for [okf_doctor()] to
+report. Pages carrying `reviewed: true` in frontmatter are human-validated
+and are never modified (protected pages).
 }

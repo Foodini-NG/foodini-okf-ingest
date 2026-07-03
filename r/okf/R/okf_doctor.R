@@ -15,10 +15,13 @@
 #' Health / maintenance report for an ingested OKF catalog.
 #'
 #' Combines the validation findings already stored in the catalog (missing type,
-#' broken links, orphans, non-ISO timestamps, ...) with maintenance checks
-#' (duplicate titles; and, when `now` is supplied, future/stale timestamps), and
-#' computes a health `score` = the percentage of non-reserved concepts with zero
-#' findings. Fully deterministic.
+#' broken links, orphans, non-ISO timestamps, ...) with maintenance checks:
+#' duplicate titles; duplicate identity (the same normalized id/alias claimed
+#' by more than one concept -- breaks by-name/wikilink resolution); hub
+#' concentration (info severity: pages whose outbound links mostly point at
+#' high in-degree hubs); and, when `now` is supplied, future/stale timestamps.
+#' Health `score` = the percentage of non-reserved concepts with zero
+#' error/warn findings -- `info` findings never affect it. Fully deterministic.
 #'
 #' @param con An open DuckDB connection to an okf catalog.
 #' @param now Optional ISO-8601 "current time" enabling stale/future-timestamp
@@ -27,8 +30,8 @@
 #' @param stale_days Optional integer; with `now`, flag timestamps older than
 #'   this many days.
 #' @return A list with `score`, `n_concepts`, `n_healthy`, `n_error`, `n_warn`,
-#'   `by_rule` (named counts), and `issues` (a data.frame of path/severity/rule/
-#'   message).
+#'   `n_info`, `by_rule` (named counts), and `issues` (a data.frame of
+#'   path/severity/rule/message; severity is `error`, `warn`, or `info`).
 #' @export
 okf_doctor <- function(con, now = NULL, stale_days = NULL) {
   cps <- DBI::dbGetQuery(con, "SELECT path, reserved, title, timestamp FROM okf_concept ORDER BY path")
@@ -130,7 +133,9 @@ okf_doctor <- function(con, now = NULL, stale_days = NULL) {
 #'   \item **moved links** -- a broken link whose basename matches *exactly one*
 #'     concept is re-pointed to that concept (relative to the linking file).
 #' }
-#' Edits files in place. Anything ambiguous is left for [okf_doctor()] to report.
+#' Edits files in place. Anything ambiguous is left for [okf_doctor()] to
+#' report. Pages carrying `reviewed: true` in frontmatter are human-validated
+#' and are never modified (protected pages).
 #'
 #' @param root A bundle directory path.
 #' @return A data.frame of changes (`path`, `kind`, `before`, `after`); zero rows

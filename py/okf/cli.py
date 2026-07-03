@@ -4,6 +4,7 @@
   okf validate <bundle> [--strict] [--json]
   okf ingest   <bundle> --db <path> [--id <id>] [--json]
   okf query    <db> [--sql "..."] [--search <term>] [--concepts] [--links] [--findings] [--json]
+  okf context  <bundle|db> [--start <path>] [--depth N] [--max-tokens N] [--no-index] [--rank ppr] [--query "..."]
   okf html     <bundle|db> --out <dir> | --single <file.html> [--title T]
   okf graph    <bundle|db> --out <file.html> [--title T]
   okf export   <bundle|db> [--json]                 # portable {nodes, edges} graph JSON
@@ -11,6 +12,8 @@
   okf doctor   <bundle|db> [--strict] [--stale-days N] [--fix] [--json]  # health / maintenance
   okf diff     <a> <b> [--json]                     # concept-level changelog; each side a bundle dir or .duckdb
   okf rank     <bundle|db> <concept> [-k N] [--json]  # Personalized PageRank relevance to a concept
+  okf embed    <db> [--model nomic-embed-text] [--incremental] [--json]
+  okf rag      <db> --query "..." [-k 5] [--model nomic-embed-text] [--json]
 
 Exit codes: 0 ok · 1 conformance failure (for diff: differences found) · 2 usage error.
 """
