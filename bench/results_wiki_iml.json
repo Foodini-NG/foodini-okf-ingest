@@ -1,0 +1,112 @@
+[
+  {
+    "bundle": "C:/Users/tsj_j/Documents/R_Files/wiki",
+    "n_pages": 120,
+    "n_eval": 58,
+    "methods": {
+      "bfs": {
+        "recall": {
+          "5": 0.2897783251231527,
+          "10": 0.36982758620689654
+        },
+        "mrr": 0.5852373433595044,
+        "ms_per_query": 0.030936219665253985,
+        "deterministic": true
+      },
+      "ppr": {
+        "recall": {
+          "5": 0.48027504105090313,
+          "10": 0.6693349753694581
+        },
+        "mrr": 0.6587092945747777,
+        "ms_per_query": 6.254120661620179,
+        "deterministic": true
+      },
+      "query-ppr": {
+        "recall": {
+          "5": 0.5381978653530378,
+          "10": 0.7441297208538589
+        },
+        "mrr": 0.7625301498259757,
+        "ms_per_query": 18.995675860486667,
+        "deterministic": true
+      },
+      "embed": {
+        "recall": {
+          "5": 0.5326149425287356,
+          "10": 0.7092775041050904
+        },
+        "mrr": 0.7766159845901226,
+        "ms_per_query": 9.289015506008832,
+        "deterministic": true
+      }
+    },
+    "mc_ppr": {
+      "1000": {
+        "r@5": 0.4944880952380952,
+        "top5_jaccard_between_runs": 0.801058201058201,
+        "top5_jaccard_vs_exact": 0.8457142857142856
+      },
+      "10000": {
+        "r@5": 0.4897380952380952,
+        "top5_jaccard_between_runs": 0.9283068783068783,
+        "top5_jaccard_vs_exact": 0.955
+      }
+    }
+  },
+  {
+    "bundle": "C:/Users/tsj_j/Documents/R_Files/interpretable_ml_wiki",
+    "n_pages": 69,
+    "n_eval": 64,
+    "methods": {
+      "bfs": {
+        "recall": {
+          "5": 0.8574404761904761,
+          "10": 0.896875
+        },
+        "mrr": 0.9695533948582729,
+        "ms_per_query": 0.01777342549758032,
+        "deterministic": true
+      },
+      "ppr": {
+        "recall": {
+          "5": 0.833296130952381,
+          "10": 0.90859375
+        },
+        "mrr": 0.8844551282051282,
+        "ms_per_query": 2.9613828082801774,
+        "deterministic": true
+      },
+      "query-ppr": {
+        "recall": {
+          "5": 0.31225818452380955,
+          "10": 0.5744977678571429
+        },
+        "mrr": 0.2942228793798873,
+        "ms_per_query": 5.08382030602661,
+        "deterministic": true
+      },
+      "embed": {
+        "recall": {
+          "5": 0.4218191964285714,
+          "10": 0.74140625
+        },
+        "mrr": 0.37499151524644947,
+        "ms_per_query": 5.278659362375038,
+        "deterministic": true
+      }
+    },
+    "mc_ppr": {
+      "1000": {
+        "r@5": 0.6457142857142857,
+        "top5_jaccard_between_runs": 0.7636243386243385,
+        "top5_jaccard_vs_exact": 0.8148214285714286
+      },
+      "10000": {
+        "r@5": 0.641547619047619,
+        "top5_jaccard_between_runs": 0.8746031746031745,
+        "top5_jaccard_vs_exact": 0.8921428571428571
+      }
+    }
+  }
+]

@@ -1,0 +1,48 @@
+[
+  {
+    "bundle": "C:/Users/tsj_j/Documents/R_Files/osqf_wiki",
+    "n_pages": 1302,
+    "n_eval": 100,
+    "methods": {
+      "bfs": {
+        "recall": {
+          "5": 0.3217792207792208,
+          "10": 0.3217792207792208
+        },
+        "mrr": 0.5733333333333334,
+        "ms_per_query": 0.021576008293777704,
+        "deterministic": true
+      },
+      "ppr": {
+        "recall": {
+          "5": 0.32761255411255413,
+          "10": 0.3392792207792208
+        },
+        "mrr": 0.5805086040036759,
+        "ms_per_query": 69.7019719844684,
+        "deterministic": true
+      },
+      "query-ppr": {
+        "recall": {
+          "5": 0.1695681818181818,
+          "10": 0.22290151515151513
+        },
+        "mrr": 0.25784680518361613,
+        "ms_per_query": 115.96564999781549,
+        "deterministic": true
+      }
+    },
+    "mc_ppr": {
+      "1000": {
+        "r@5": 0.2833333333333333,
+        "top5_jaccard_between_runs": 0.8782186948853616,
+        "top5_jaccard_vs_exact": 0.9026190476190475
+      },
+      "10000": {
+        "r@5": 0.2833333333333333,
+        "top5_jaccard_between_runs": 0.9185185185185186,
+        "top5_jaccard_vs_exact": 0.9338095238095238
+      }
+    }
+  }
+]

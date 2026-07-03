@@ -397,6 +397,14 @@ actually matter to the topic fill the token budget first instead of whatever
 the hub happens to link. A conformance fixture locks R and Python to
 byte-identical scores. (Programmatic: `okf_rank()` / `okf.graph.ppr()`.)
 
+Measured, not asserted — [`bench/`](bench/) runs a leave-one-link-out
+retrieval benchmark on real corpora: on a hub-heavy living wiki,
+query-seeded exact PPR nearly doubles BFS recall (R@5 0.29 → 0.54) and
+matches local vector embeddings with zero embedding infrastructure, while a
+Monte-Carlo PPR baseline changes 7–24% of its top-5 between identical runs —
+exact power iteration is bit-stable at milliseconds per query. Full tables
+and honest caveats in [`bench/README.md`](bench/README.md).
+
 **Don't know which concept to start from? Ask a question.** `context --query`
 is the full hybrid cascade, still with zero models: deterministic lexical
 seed selection (`okf_seeds()`: +3 title / +2 description·tags / +1 body per
