@@ -75,6 +75,18 @@ got_rank = [{"path": r["path"], "score": round(r["score"], 8)}
 check("rank.ranking", got_rank, expr["ranking"])
 conr.close()
 
+# --- query seeding (lexical seeds -> multi-seed PPR, parity-locked) ---
+from okf.graph import seeds as okf_seeds  # noqa: E402
+conq, _ = okf.ingest(os.path.join(HERE, "bundles", "store"))
+expq = json.load(open(os.path.join(HERE, "expected", "query.json")))
+got_seeds = [{"path": x["path"], "score": x["score"]} for x in okf_seeds(conq, expq["query"])]
+check("query.seeds", got_seeds, expq["seeds"])
+got_qr = [{"path": x["path"], "score": round(x["score"], 8)}
+          for x in okf_ppr(conq, [x["path"] for x in got_seeds],
+                           weights=[x["score"] for x in got_seeds], k=10)]
+check("query.ranking", got_qr, expq["ranking"])
+conq.close()
+
 # --- diff (deterministic concept-level changelog between two bundle states) ---
 from okf.diff import diff as okf_diff  # noqa: E402
 dd = okf_diff(os.path.join(HERE, "bundles", "diff_a"), os.path.join(HERE, "bundles", "diff_b"))

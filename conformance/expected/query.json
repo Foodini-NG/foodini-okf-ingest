@@ -1,0 +1,35 @@
+{
+  "query": "how is revenue computed for orders?",
+  "seeds": [
+    {
+      "path": "metrics/revenue.md",
+      "score": 6.0
+    },
+    {
+      "path": "orders.md",
+      "score": 5.0
+    },
+    {
+      "path": "customers.md",
+      "score": 1.0
+    }
+  ],
+  "ranking": [
+    {
+      "path": "orders.md",
+      "score": 0.31557405
+    },
+    {
+      "path": "index.md",
+      "score": 0.26687275
+    },
+    {
+      "path": "metrics/revenue.md",
+      "score": 0.2400266
+    },
+    {
+      "path": "customers.md",
+      "score": 0.1775266
+    }
+  ]
+}

@@ -1,3 +1,21 @@
+# okf 0.9.0
+
+* Query-seeded retrieval: new `okf_seeds()` (deterministic lexical seed
+  selection — +3 title / +2 description·tags / +1 body per query token, fixed
+  stopword list) and multi-seed `okf_rank()` (`start` may be a vector, with
+  `weights`). `okf_context(query = "...")` chains them: lexical seeds ->
+  multi-seed Personalized PageRank -> relevance-filled context. Deterministic
+  hybrid retrieval with no embeddings; CLI `context --query`.
+* `okf_doctor()` gains `duplicate_identity` (the same normalized id/alias
+  claimed by more than one concept — breaks by-name resolution) and
+  `hub_concentration` (info severity: pages whose outbound links mostly point
+  at high in-degree hubs). New `info` severity never affects the health score
+  (`n_info` added).
+* Protected pages: concepts with `reviewed: true` in frontmatter are never
+  modified by `okf_doctor_fix()` — human-validated content stays put.
+* New conformance fixture locks query seeding + multi-seed PPR across R and
+  Python.
+
 # okf 0.8.0
 
 * New `okf_rank()`: Personalized PageRank relevance scores over the concept

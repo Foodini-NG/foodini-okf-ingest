@@ -571,12 +571,18 @@ okf_embed <- function(con, embedder = NULL, target_chars = 600L, incremental = F
 #'   `depth`, in discovery order) or `"ppr"` (rank the whole graph by
 #'   Personalized PageRank from `start` via [okf_rank()] and budget-fill by
 #'   relevance -- hubs no longer drown out the pages that matter).
+#' @param query Free-text query as an alternative to `start`: seed concepts
+#'   are chosen lexically via [okf_seeds()], then the graph is ranked by
+#'   multi-seed PPR (weights proportional to lexical scores) and the budget
+#'   fills by relevance. Deterministic hybrid retrieval -- no embeddings.
 #' @return A list with `text` (the markdown blob), `included`/`omitted` concept
-#'   paths, and `est_tokens`.
+#'   paths, `est_tokens`, and (for `query`) the `seeds` used.
 #' @export
 okf_context <- function(con, start = NULL, depth = 1L, max_tokens = 8000L,
-                        include_index = TRUE, rank = c("bfs", "ppr")) {
+                        include_index = TRUE, rank = c("bfs", "ppr"),
+                        query = NULL) {
   rank <- match.arg(rank)
+  if (!is.null(query) && !is.null(start)) stop("give either start or query, not both")
   cps <- DBI::dbGetQuery(con, "SELECT path, reserved, title, body FROM okf_concept")
   lks <- DBI::dbGetQuery(con, "SELECT src_path, dst_path FROM okf_link WHERE resolved")
   nonres <- cps$path[!as.logical(cps$reserved)]
@@ -587,7 +593,13 @@ okf_context <- function(con, start = NULL, depth = 1L, max_tokens = 8000L,
     adj[[lks$dst_path[i]]] <- unique(c(adj[[lks$dst_path[i]]], lks$src_path[i]))
   }
 
-  if (!is.null(start)) {
+  seeds_used <- NULL
+  if (!is.null(query)) {
+    seeds_used <- okf_seeds(con, query)
+    if (!nrow(seeds_used)) stop("query matched no concepts: ", query)
+    r <- okf_rank(con, seeds_used$path, weights = seeds_used$score, k = Inf)
+    sel <- r$path[r$path %in% nonres]
+  } else if (!is.null(start)) {
     if (!(start %in% cps$path)) stop("start concept not found: ", start)
     if (rank == "ppr") {
       r <- okf_rank(con, start, k = Inf)
@@ -620,7 +632,9 @@ okf_context <- function(con, start = NULL, depth = 1L, max_tokens = 8000L,
     label <- if (!is.na(row$title[1]) && nzchar(row$title[1])) sprintf("%s (%s)", row$title[1], p) else p
     if (add_sec(label, row$body[1])) inc <- c(inc, p) else omit <- c(omit, p)
   }
-  list(text = out, included = inc, omitted = omit, est_tokens = used)
+  res <- list(text = out, included = inc, omitted = omit, est_tokens = used)
+  if (!is.null(seeds_used)) res$seeds <- seeds_used$path
+  res
 }
 
 #' Semantic search over an embedded catalog.

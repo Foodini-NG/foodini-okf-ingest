@@ -11,7 +11,8 @@ okf_context(
   depth = 1L,
   max_tokens = 8000L,
   include_index = TRUE,
-  rank = c("bfs", "ppr")
+  rank = c("bfs", "ppr"),
+  query = NULL
 )
 }
 \arguments{
@@ -30,10 +31,15 @@ or when `rank = "ppr"`).}
 `depth`, in discovery order) or `"ppr"` (rank the whole graph by
 Personalized PageRank from `start` via [okf_rank()] and budget-fill by
 relevance -- hubs no longer drown out the pages that matter).}
+
+\item{query}{Free-text query as an alternative to `start`: seed concepts
+are chosen lexically via [okf_seeds()], then the graph is ranked by
+multi-seed PPR (weights proportional to lexical scores) and the budget
+fills by relevance. Deterministic hybrid retrieval -- no embeddings.}
 }
 \value{
 A list with `text` (the markdown blob), `included`/`omitted` concept
-  paths, and `est_tokens`.
+  paths, `est_tokens`, and (for `query`) the `seeds` used.
 }
 \description{
 This is the OKF / "LLM wiki" consume primitive (Karpathy): hand the agent

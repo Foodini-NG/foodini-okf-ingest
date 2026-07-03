@@ -39,6 +39,54 @@ def doctor(con, now: Optional[str] = None, stale_days: Optional[int] = None) -> 
                 issues.append({"path": p, "severity": "warn", "rule": "duplicate_title",
                                "message": f"title shared with another concept: {title}"})
 
+    # duplicate identity — same normalized id/alias claimed by >1 concept
+    import json as _json
+    fmres = con.execute(
+        "SELECT path, frontmatter FROM okf_concept WHERE reserved = FALSE ORDER BY path").fetchall()
+    normk = lambda x: "".join(ch for ch in str(x).lower() if ch.isalnum())
+    claims = {}
+    for path, fm_raw in fmres:
+        try:
+            fm = _json.loads(fm_raw or "{}")
+        except Exception:
+            fm = {}
+        keys = []
+        if fm.get("id") is not None:
+            keys.append(normk(fm["id"]))
+        keys += [normk(a) for a in (fm.get("aliases") or [])]
+        for kk in sorted({k for k in keys if k}):
+            claims.setdefault(kk, []).append(path)
+    for kk in sorted(claims):
+        paths = sorted(set(claims[kk]))
+        if len(paths) > 1:
+            for p2 in paths:
+                others = ", ".join(x for x in paths if x != p2)
+                issues.append({"path": p2, "severity": "warn", "rule": "duplicate_identity",
+                               "message": f"id/alias '{kk}' also claimed by: {others}"})
+
+    # hub concentration (info): outbound links mostly pointing at hub pages
+    lk2 = con.execute(
+        "SELECT DISTINCT src_path, dst_path FROM okf_link WHERE resolved").fetchall()
+    if lk2:
+        indeg = {}
+        for _, d in lk2:
+            indeg[d] = indeg.get(d, 0) + 1
+        pos = sorted(indeg.values())
+        q90 = pos[max(0, -(-9 * len(pos) // 10) - 1)]   # ceil(0.9*n), 1-based -> 0-based
+        hubs = {d for d, c in indeg.items() if c >= max(3, q90)}
+        outs = {}
+        for s2, d in lk2:
+            outs.setdefault(s2, set()).add(d)
+        nonres_paths = {r[0] for r in nonres}
+        for p2 in sorted(outs):
+            if p2 not in nonres_paths:
+                continue
+            dsts = outs[p2]
+            nh = len(dsts & hubs)
+            if len(dsts) >= 3 and nh / len(dsts) >= 0.8:
+                issues.append({"path": p2, "severity": "info", "rule": "hub_concentration",
+                               "message": f"{nh}/{len(dsts)} outbound links point at hub pages"})
+
     # future / stale timestamps (only with a reference time)
     if now:
         try:
@@ -57,7 +105,7 @@ def doctor(con, now: Optional[str] = None, stale_days: Optional[int] = None) -> 
                     issues.append({"path": path, "severity": "warn", "rule": "stale_timestamp",
                                    "message": f"timestamp older than {int(stale_days)} days: {ts}"})
 
-    flagged = {i["path"] for i in issues}
+    flagged = {i["path"] for i in issues if i["severity"] != "info"}  # info never hurts score
     n = len(nonres)
     healthy = sum(1 for r in nonres if r[0] not in flagged)
     score = round(100 * healthy / n) if n else 100
@@ -68,6 +116,7 @@ def doctor(con, now: Optional[str] = None, stale_days: Optional[int] = None) -> 
     return {"score": score, "n_concepts": n, "n_healthy": healthy,
             "n_error": sum(1 for i in issues if i["severity"] == "error"),
             "n_warn": sum(1 for i in issues if i["severity"] == "warn"),
+            "n_info": sum(1 for i in issues if i["severity"] == "info"),
             "by_rule": by_rule, "issues": issues}
 
 
@@ -102,9 +151,13 @@ def doctor_fix(root: str) -> list:
     def fpath(rel):
         return os.path.join(root, rel)
 
+    # Pages marked `reviewed: true` are human-validated — automated maintenance
+    # must not touch them (protected pages).
+    reviewed = {c.path for c in b.concepts if (c.frontmatter or {}).get("reviewed") is True}
+
     # 1) timestamp normalization (frontmatter line)
     for c in b.concepts:
-        if c.reserved or not c.timestamp:
+        if c.reserved or not c.timestamp or c.path in reviewed:
             continue
         iso = _to_iso(c.timestamp)
         if not iso or iso == c.timestamp:
@@ -132,6 +185,8 @@ def doctor_fix(root: str) -> list:
         if link["resolved"]:
             continue
         raw, src = link["dst_raw"], link["src_path"]
+        if src in reviewed:
+            continue                            # protected page: report, don't edit
         b0 = base_of(raw)
         match = bn.get(b0, [])
         if not b0 or len(match) != 1:

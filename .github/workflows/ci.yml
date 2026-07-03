@@ -45,6 +45,7 @@ jobs:
           okf doctor conformance/bundles/store | grep 'health:' >/dev/null
           okf diff conformance/bundles/diff_a conformance/bundles/diff_a | grep 'identical' >/dev/null
           okf rank conformance/bundles/store orders.md | grep 'customers.md' >/dev/null
+          okf context conformance/bundles/store --query 'revenue orders' 2>/dev/null | grep 'Revenue' >/dev/null
           okf validate docs/okf-bundle --strict      # dogfood bundle stays conformant
           okf doctor docs/okf-bundle --strict         # …and healthy (100/100)
 
@@ -87,6 +88,7 @@ jobs:
           Rscript r/okf/bin/okf.R doctor conformance/bundles/store | grep 'health:' >/dev/null
           Rscript r/okf/bin/okf.R diff conformance/bundles/diff_a conformance/bundles/diff_a | grep 'identical' >/dev/null
           Rscript r/okf/bin/okf.R rank conformance/bundles/store orders.md | grep 'customers.md' >/dev/null
+          Rscript r/okf/bin/okf.R context conformance/bundles/store --query 'revenue orders' 2>/dev/null | grep 'Revenue' >/dev/null
           Rscript r/okf/bin/okf.R validate docs/okf-bundle --strict
           Rscript r/okf/bin/okf.R doctor docs/okf-bundle --strict
         shell: bash

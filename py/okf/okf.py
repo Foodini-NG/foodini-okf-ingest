@@ -484,7 +484,7 @@ def _bfs_select(cps, adj, nonres, start, depth):
     return [p for p in sel if p in nonres]
 
 
-def context(con, start=None, depth: int = 1, max_tokens: int = 8000, include_index: bool = True, rank: str = "bfs"):
+def context(con, start=None, depth: int = 1, max_tokens: int = 8000, include_index: bool = True, rank: str = "bfs", query=None):
     """Assemble an index-first, link-following slice of a bundle as one markdown
     blob for direct LLM consumption — the OKF / "LLM wiki" consume primitive.
     Uses the concept graph (no embeddings, no vector search). With `start`, walks
@@ -499,7 +499,18 @@ def context(con, start=None, depth: int = 1, max_tokens: int = 8000, include_ind
         adj.setdefault(d, set()).add(s)
     nonres = [p for p, v in cps.items() if not v["reserved"]]
 
-    if start is not None:
+    seeds_used = None
+    if query is not None and start is not None:
+        raise ValueError("give either start or query, not both")
+    if query is not None:
+        from .graph import ppr as _ppr, seeds as _seeds
+        seeds_used = _seeds(con, query)
+        if not seeds_used:
+            raise ValueError(f"query matched no concepts: {query}")
+        r = _ppr(con, [x["path"] for x in seeds_used],
+                 weights=[x["score"] for x in seeds_used], k=None)
+        sel = [x["path"] for x in r if x["path"] in nonres]
+    elif start is not None:
         if start not in cps:
             raise ValueError(f"start concept not found: {start}")
         if rank == "ppr":
@@ -529,4 +540,7 @@ def context(con, start=None, depth: int = 1, max_tokens: int = 8000, include_ind
         v = cps[p]
         label = f'{v["title"]} ({p})' if v["title"] else p
         (inc if add(label, v["body"]) else omit).append(p)
-    return {"text": "".join(out), "included": inc, "omitted": omit, "est_tokens": used}
+    res = {"text": "".join(out), "included": inc, "omitted": omit, "est_tokens": used}
+    if seeds_used is not None:
+        res["seeds"] = [x["path"] for x in seeds_used]
+    return res

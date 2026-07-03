@@ -45,6 +45,43 @@ okf_doctor <- function(con, now = NULL, stale_days = NULL) {
     for (p in nonres$path[which(!is.na(nonres$title) & nonres$title == d)])
       val <- add(val, p, "warn", "duplicate_title", paste0("title shared with another concept: ", d))
 
+  # maintenance check: duplicate identity -- the same normalized id/alias
+  # claimed by more than one concept (breaks by-name/wikilink resolution)
+  fmres <- DBI::dbGetQuery(con,
+    "SELECT path, frontmatter FROM okf_concept WHERE reserved = FALSE ORDER BY path")
+  normk <- function(x) gsub("[^a-z0-9]", "", tolower(as.character(x)))
+  claims <- list()
+  for (i in seq_len(nrow(fmres))) {
+    fm <- tryCatch(jsonlite::fromJSON(fmres$frontmatter[i]), error = function(e) list())
+    keys <- normk(c(if (!is.null(fm$id)) fm$id, unlist(fm$aliases)))
+    for (kk in unique(keys[nzchar(keys)]))
+      claims[[kk]] <- c(claims[[kk]], fmres$path[i])
+  }
+  for (kk in names(claims)) if (length(unique(claims[[kk]])) > 1)
+    for (p in unique(claims[[kk]]))
+      val <- add(val, p, "warn", "duplicate_identity",
+                 paste0("id/alias '", kk, "' also claimed by: ",
+                        paste(setdiff(unique(claims[[kk]]), p), collapse = ", ")))
+
+  # maintenance check (info): hub concentration -- a page whose outbound links
+  # mostly point at high in-degree hubs adds little distinct structure.
+  # Info severity: reported, but does not count against the health score.
+  lk2 <- DBI::dbGetQuery(con,
+    "SELECT DISTINCT src_path, dst_path FROM okf_link WHERE resolved")
+  if (nrow(lk2)) {
+    indeg <- table(lk2$dst_path)
+    pos <- sort(as.integer(indeg))
+    q90 <- pos[max(1L, ceiling(0.9 * length(pos)))]
+    hubs <- names(indeg)[as.integer(indeg) >= max(3L, q90)]
+    outs <- split(lk2$dst_path, lk2$src_path)
+    for (p in intersect(names(outs), nonres$path)) {
+      dsts <- unique(outs[[p]])
+      if (length(dsts) >= 3 && mean(dsts %in% hubs) >= 0.8)
+        val <- add(val, p, "info", "hub_concentration",
+                   sprintf("%d/%d outbound links point at hub pages", sum(dsts %in% hubs), length(dsts)))
+    }
+  }
+
   # maintenance check: future / stale timestamps (only when a reference time is given)
   if (!is.null(now)) {
     now_t <- tryCatch(as.POSIXct(now, format = "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"), error = function(e) NA)
@@ -61,12 +98,13 @@ okf_doctor <- function(con, now = NULL, stale_days = NULL) {
     }
   }
 
-  flagged <- unique(val$path)
+  flagged <- unique(val$path[val$severity != "info"])   # info never hurts the score
   n <- nrow(nonres); healthy <- sum(!(nonres$path %in% flagged))
   score <- if (n > 0) as.integer(round(100 * healthy / n)) else 100L
   by_rule <- if (nrow(val)) as.list(table(val$rule)) else list()
   list(score = score, n_concepts = n, n_healthy = healthy,
        n_error = sum(val$severity == "error"), n_warn = sum(val$severity == "warn"),
+       n_info = sum(val$severity == "info"),
        by_rule = by_rule, issues = val[order(val$severity, val$path), , drop = FALSE])
 }
 
@@ -107,9 +145,15 @@ okf_doctor_fix <- function(root) {
       before = before, after = after, stringsAsFactors = FALSE)
   fpath <- function(rel) file.path(root, rel)
 
+  # Pages marked `reviewed: true` are human-validated -- automated maintenance
+  # must not touch them (Obsidian-plugin-style protected pages).
+  is_reviewed <- function(c) isTRUE(c$frontmatter$reviewed)
+  reviewed <- vapply(rd$concepts, is_reviewed, logical(1))
+  names(reviewed) <- vapply(rd$concepts, function(c) c$path, character(1))
+
   # 1) timestamp normalization (frontmatter line edit)
   for (c in rd$concepts) {
-    if (c$reserved || is.na(c$timestamp)) next
+    if (c$reserved || is.na(c$timestamp) || is_reviewed(c)) next
     iso <- .okf_to_iso(c$timestamp)
     if (is.na(iso) || identical(iso, c$timestamp)) next
     lines <- readLines(fpath(c$path), warn = FALSE, encoding = "UTF-8")
@@ -129,6 +173,7 @@ okf_doctor_fix <- function(root) {
   brk <- lk[!lk$resolved, , drop = FALSE]
   for (i in seq_len(nrow(brk))) {
     raw <- brk$dst_raw[i]; src <- brk$src_path[i]
+    if (isTRUE(reviewed[[src]])) next          # protected page: report, don't edit
     b <- base_of(raw); if (!nzchar(b)) next
     match <- known[bn == b]
     if (length(match) != 1) next                      # ambiguous or none -> report, don't guess

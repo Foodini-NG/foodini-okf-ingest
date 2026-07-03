@@ -4,12 +4,22 @@
 \alias{okf_rank}
 \title{Personalized PageRank scores for the concept graph.}
 \usage{
-okf_rank(con, start, damping = 0.85, tol = 1e-12, max_iter = 200L, k = 20L)
+okf_rank(
+  con,
+  start,
+  damping = 0.85,
+  tol = 1e-12,
+  max_iter = 200L,
+  k = 20L,
+  weights = NULL
+)
 }
 \arguments{
 \item{con}{An open DuckDB connection to an okf catalog.}
 
-\item{start}{Concept path to personalize on.}
+\item{start}{Concept path(s) to personalize on. A vector spreads the
+teleport across several seeds (see `weights`) -- this is how
+[okf_context()] serves free-text queries via [okf_seeds()].}
 
 \item{damping}{Continue-walk probability (teleport = 1 - damping).}
 
@@ -18,6 +28,9 @@ okf_rank(con, start, damping = 0.85, tol = 1e-12, max_iter = 200L, k = 20L)
 \item{max_iter}{Iteration cap.}
 
 \item{k}{Return the top k concepts (Inf for all with score > 0).}
+
+\item{weights}{Optional non-negative weights for multiple `start` seeds
+(normalized internally; default equal).}
 }
 \value{
 A data.frame of `path`, `score`, `title`, `reserved`, sorted by

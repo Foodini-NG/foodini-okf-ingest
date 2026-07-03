@@ -22,3 +22,7 @@ tags: [log]
   PageRank over the concept graph (deterministic, parity-locked); `context
   --rank ppr` budget-fills by relevance. Idea credit: the Obsidian Karpathy
   LLM Wiki plugin's Monte-Carlo PPR retrieval — made exact here.
+- **2026-07-02** 0.9.0 — query-seeded retrieval (`context --query`: lexical
+  seeds -> multi-seed exact PPR; deterministic hybrid retrieval, no
+  embeddings); doctor gains `duplicate_identity` + info-level
+  `hub_concentration`; `reviewed: true` pages are protected from `--fix`.

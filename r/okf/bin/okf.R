@@ -6,7 +6,7 @@
 #   okf ingest   <bundle|git-url|tar/zip> --db <path> [--id <id>] [--subdir <p>] [--branch <b>] [--incremental] [--json]
 #   okf query    <db> [--sql "SELECT ..."] [--search <term>]
 #                     [--concepts] [--links] [--findings] [--json]
-#   okf context  <bundle|db> [--start <path>] [--depth N] [--max-tokens N] [--no-index] [--rank ppr]
+#   okf context  <bundle|db> [--start <path>] [--depth N] [--max-tokens N] [--no-index] [--rank ppr] [--query "..."]
 #   okf html     <bundle|db> --out <dir> | --single <file.html> [--title T]
 #   okf graph    <bundle|db> --out <file.html> [--title T]
 #   okf export   <bundle|db> [--json] [--mermaid]     # portable {nodes, edges} graph JSON, or a Mermaid diagram
@@ -114,7 +114,8 @@ if (cmd == "validate") {
                      depth = as.integer(optval("--depth", "1")),
                      max_tokens = as.integer(optval("--max-tokens", "8000")),
                      include_index = !flag("--no-index"),
-                     rank = optval("--rank", "bfs"))
+                     rank = optval("--rank", "bfs"),
+                     query = optval("--query"))
   cat(ctx$text)
   cat(sprintf("\n<!-- okf context: %d concepts, ~%d tokens, %d omitted -->\n",
               length(ctx$included), ctx$est_tokens, length(ctx$omitted)), file = stderr())

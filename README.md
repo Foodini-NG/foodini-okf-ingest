@@ -365,6 +365,12 @@ okf doctor ./my-bundle --stale-days 365 # also flag timestamps older than a year
 okf doctor ./my-bundle --fix            # apply ONLY safe repairs, report each
 ```
 
+`doctor` also flags `duplicate_identity` (one id/alias claimed by two
+concepts — breaks `[[wikilink]]` resolution) and, at info level (never hurts
+the score), `hub_concentration` (pages whose links mostly point at hubs).
+Pages marked **`reviewed: true`** in frontmatter are human-validated:
+`doctor --fix` never touches them.
+
 `--fix` is conservative on purpose — it only normalizes a parseable non-ISO
 `timestamp`, and re-points a broken link when *exactly one* basename matches.
 Anything ambiguous is reported, never guessed (no LLM). Ready-made
@@ -390,6 +396,16 @@ depth 1 is equal") to relevance-weighted — on hub-heavy wikis the pages that
 actually matter to the topic fill the token budget first instead of whatever
 the hub happens to link. A conformance fixture locks R and Python to
 byte-identical scores. (Programmatic: `okf_rank()` / `okf.graph.ppr()`.)
+
+**Don't know which concept to start from? Ask a question.** `context --query`
+is the full hybrid cascade, still with zero models: deterministic lexical
+seed selection (`okf_seeds()`: +3 title / +2 description·tags / +1 body per
+query token) → multi-seed PPR weighted by those scores → relevance-filled
+context:
+
+```bash
+okf context ./my-bundle --query "how is revenue computed?" --max-tokens 4000
+```
 
 ### `diff` — what changed, as knowledge structure
 

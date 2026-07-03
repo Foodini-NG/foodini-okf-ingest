@@ -5,11 +5,11 @@ from .okf import read_bundle, validate, links, ingest, search, fetch, context, B
 from .rag import chunk_body, ollama_embedder, embed
 from .rag import rag as rag_search
 from .html import render_html
-from .graph import backlinks, impact, clusters, graph_json, graph_html, graph_mermaid, ppr
+from .graph import backlinks, impact, clusters, graph_json, graph_html, graph_mermaid, ppr, seeds
 from .doctor import doctor, doctor_fix
 from .diff import diff, bundle_state
 
 __all__ = ["read_bundle", "validate", "links", "ingest", "search", "fetch", "context",
            "Bundle", "Concept", "chunk_body", "ollama_embedder", "embed", "rag_search",
            "render_html", "backlinks", "impact", "clusters", "graph_json", "graph_html",
-           "graph_mermaid", "ppr", "doctor", "doctor_fix", "diff", "bundle_state"]
+           "graph_mermaid", "ppr", "seeds", "doctor", "doctor_fix", "diff", "bundle_state"]

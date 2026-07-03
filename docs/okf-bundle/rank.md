@@ -21,3 +21,7 @@ mutually relevant, as in [links](links.md)); teleport and dangling mass return
 to the seed. [Context](context.md) consumes it via `--rank ppr`: the token
 budget fills by relevance instead of BFS discovery order, so hub-heavy bundles
 surface the pages that matter to the topic first.
+
+Multi-seed personalization serves free-text queries: `context --query`
+picks seeds lexically (title > description/tags > body), then ranks the
+graph from all seeds at once — the deterministic answer to hybrid retrieval.

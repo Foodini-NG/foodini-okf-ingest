@@ -72,6 +72,43 @@ test_that("okf_rank is deterministic PPR and context can budget-fill by it", {
   expect_false("index.md" %in% ctx$included[-1]) # reserved not in ranked selection
 })
 
+test_that("query seeding: lexical seeds -> multi-seed PPR context", {
+  res <- okf_ingest(make_bundle()); con <- res$con
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE))
+  sd <- okf_seeds(con, "the first note about A")
+  expect_true("a.md" %in% sd$path)               # title + body hits
+  expect_true(all(sd$score > 0))
+  # multi-seed rank conserves mass and honours weights
+  rk <- okf_rank(con, c("a.md", "sub/b.md"), weights = c(3, 1), k = Inf)
+  expect_true(abs(sum(rk$score) - 1) < 1e-6)
+  expect_error(okf_rank(con, c("a.md"), weights = c(1, 2)), "weights")
+  ctx <- okf_context(con, query = "first note")
+  expect_true("a.md" %in% ctx$included)
+  expect_true("a.md" %in% ctx$seeds)
+  expect_error(okf_context(con, start = "a.md", query = "x"), "not both")
+  expect_error(okf_context(con, query = "zzz qqq www"), "matched no concepts")
+})
+
+test_that("doctor: duplicate_identity, info severity, reviewed protection", {
+  d <- tempfile("okfd_"); dir.create(d)
+  writeLines(c("---","type: Index","title: Home","---","# H","- [A](a.md)","- [B](b.md)"),
+             file.path(d, "index.md"))
+  writeLines(c("---","type: Note","title: A","id: thing","timestamp: 2026/01/02","---","# A"),
+             file.path(d, "a.md"))
+  writeLines(c("---","type: Note","title: B","aliases: [Thing]","reviewed: true",
+               "timestamp: 2026/01/02","---","# B"), file.path(d, "b.md"))
+  res <- okf_ingest(d); con <- res$con
+  rep <- okf_doctor(con)
+  expect_true("duplicate_identity" %in% rep$issues$rule)   # id vs alias collision
+  expect_true(rep$n_info >= 0)                             # info field present
+  DBI::dbDisconnect(con, shutdown = TRUE)
+  # doctor_fix normalizes a.md timestamp but must NOT touch reviewed b.md
+  fx <- okf_doctor_fix(d)
+  expect_true("a.md" %in% fx$path)
+  expect_false("b.md" %in% fx$path)
+  expect_true(grepl("2026/01/02", paste(readLines(file.path(d, "b.md")), collapse = "")))
+})
+
 test_that("okf_diff reports concept and graph deltas deterministically", {
   a <- make_bundle()
   b <- make_bundle()

@@ -55,6 +55,7 @@ def main(argv=None):
     c.add_argument("--max-tokens", type=int, default=8000, dest="max_tokens")
     c.add_argument("--no-index", action="store_true")
     c.add_argument("--rank", default="bfs", choices=["bfs", "ppr"])
+    c.add_argument("--query", default=None)
     c.add_argument("--subdir"); c.add_argument("--branch")
 
     h = sub.add_parser("html"); h.add_argument("source")
@@ -162,7 +163,7 @@ def main(argv=None):
         try:
             ctx = okf.context(con, start=a.start, depth=a.depth,
                               max_tokens=a.max_tokens, include_index=not a.no_index,
-                              rank=a.rank)
+                              rank=a.rank, query=a.query)
         finally:
             close()
         sys.stdout.write(ctx["text"])

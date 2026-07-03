@@ -139,8 +139,47 @@ def graph_mermaid(con) -> str:
     return "\n".join(lines)
 
 
-def ppr(con, start: str, damping: float = 0.85, tol: float = 1e-12,
-        max_iter: int = 200, k: int = 20) -> list:
+OKF_STOPWORDS = {"the", "and", "for", "are", "was", "were", "with", "that",
+                 "this", "from", "how", "what", "when", "where", "which",
+                 "does", "did", "can", "could", "should", "would", "will",
+                 "has", "have", "had", "not", "its", "our", "your", "their",
+                 "about", "into", "over", "under", "why", "who", "whom"}
+
+
+def seeds(con, query: str, k: int = 5) -> list:
+    """Deterministic lexical seed selection for a free-text query: lowercase
+    alphanumeric tokens (length >= 3, fixed stopword list) score every
+    non-reserved concept +3 per distinct token in the title, +2 in the
+    description or tags, +1 in
+    the body. Same query -> same seeds; no embeddings. Feed to ppr() as
+    multi-seed personalization (context(query=...) does this for you).
+    Mirrors r/okf/R/okf_rank.R::okf_seeds."""
+    import re as _re
+    toks = sorted({t for t in _re.findall(r"[a-z0-9]+", query.lower())
+                   if len(t) >= 3 and t not in OKF_STOPWORDS})
+    cps = con.execute(
+        "SELECT path, title, description, tags, body FROM okf_concept "
+        "WHERE reserved = FALSE ORDER BY path").fetchall()
+    out = []
+    for path, title, desc, tags, body in cps:
+        ttl = (title or "").lower(); tgs = (tags or "").lower()
+        dsc = (desc or "").lower(); bod = (body or "").lower()
+        sc = 0
+        for t in toks:
+            if t in ttl:
+                sc += 3
+            if t in dsc or t in tgs:
+                sc += 2
+            if t in bod:
+                sc += 1
+        if sc > 0:
+            out.append({"path": path, "score": float(sc), "title": title})
+    out.sort(key=lambda r: (-r["score"], r["path"]))
+    return out[:k]
+
+
+def ppr(con, start, damping: float = 0.85, tol: float = 1e-12,
+        max_iter: int = 200, k: int = 20, weights=None) -> list:
     """Personalized PageRank scores for the concept graph, seeded at `start`.
 
     EXACT power iteration (no Monte-Carlo sampling) over the UNDIRECTED
@@ -156,8 +195,14 @@ def ppr(con, start: str, damping: float = 0.85, tol: float = 1e-12,
     lks = con.execute(
         "SELECT DISTINCT src_path, dst_path FROM okf_link WHERE resolved").fetchall()
     nodes = [r[0] for r in cps]
-    if start not in nodes:
-        raise ValueError(f"start concept not found: {start}")
+    starts = [start] if isinstance(start, str) else list(start)
+    missing = [x for x in starts if x not in nodes]
+    if missing:
+        raise ValueError("start concept not found: " + ", ".join(missing))
+    if weights is None:
+        weights = [1.0] * len(starts)
+    if len(weights) != len(starts) or any(w < 0 for w in weights) or sum(weights) <= 0:
+        raise ValueError("weights must be non-negative, same length as start, positive sum")
     n = len(nodes)
     idx = {p_: i for i, p_ in enumerate(nodes)}
 
@@ -171,7 +216,10 @@ def ppr(con, start: str, damping: float = 0.85, tol: float = 1e-12,
         deg[s_i] += 1
 
     seed = [0.0] * n
-    seed[idx[start]] = 1.0
+    for st, w in zip(starts, weights):
+        seed[idx[st]] += w
+    tot = sum(seed)
+    seed = [x / tot for x in seed]
     p_vec = seed[:]
     for _ in range(max_iter):
         contrib = [0.0] * n

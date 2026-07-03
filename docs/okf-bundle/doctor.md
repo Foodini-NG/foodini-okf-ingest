@@ -22,3 +22,7 @@ reported, never guessed (consistent with [determinism](determinism.md); no LLM).
 
 Wire it into CI or a pre-commit hook (see `examples/`) for ongoing maintenance.
 It complements [incremental](incremental.md) re-ingest and the [CLI](cli.md).
+
+Also flagged: `duplicate_identity` (an id/alias claimed twice — breaks
+by-name resolution) and info-level `hub_concentration`. Pages with
+`reviewed: true` are human-validated: `--fix` never edits them.
