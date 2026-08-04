@@ -18,6 +18,7 @@ Instead the **core is two portable, language-neutral artifacts**, and the
 | Binding | `r/okf/` | R: yaml, DBI, duckdb, digest, jsonlite. Full surface. |
 | Binding | `py/okf/` | Python: pyyaml, duckdb (stdlib hashlib/json). Full surface. |
 | Binding | `rust/okf-ingest/` | Rust: yaml-rust2, sha1, regex, serde_json, tar/flate2/zip. Fixture-locked core only, catalog-free. |
+| Binding | `cpp/` | C++17: rapidyaml, nlohmann/json, vendored SHA-1; system `tar`/`git` for fetch. Fixture-locked core only, catalog-free. |
 
 A new binding (TS, Go, …) is conformant the moment it passes `conformance/`.
 The Rust binding demonstrates that the catalog itself is not part of the
@@ -113,6 +114,17 @@ R; the `okf-ingest[html]` extra in Python). Link resolution reuses
 - **`n_concepts`** counts non-reserved concept documents; `index.md`/`log.md`
   are catalogued (`reserved = true`) but not counted as concepts (OKF: "all
   other `.md` files are concept documents").
+- **C++ specifics**: rapidyaml keeps every scalar as raw text (no implicit
+  typing), so verbatim timestamps and `"0.1"` come free; frontmatter scalars
+  land in JSON as strings (semantically equal, not byte-locked). PPR parity
+  requires the build to never enable fast-math or FMA contraction — CMake
+  pins `-ffp-contract=off` (GCC/Clang) and `/fp:precise` (MSVC); `round_dec`
+  is `snprintf("%.Nf")` + `strtod` (correctly-rounded on glibc and UCRT).
+  Fetch shells out to the system `tar` with fully RELATIVE paths: GNU tar
+  reads drive-colon `-f` args as remote `host:path` syntax and msys tar
+  mishandles drive-colon `-C` targets, so the archive is copied next to the
+  extraction dir first. zip and remote-archive fetch are not supported (use
+  R/Python).
 - **Rust specifics**: yaml-rust2 speaks YAML 1.2 core schema — there is no
   timestamp tag, so verbatim timestamps come free (no custom loader needed);
   float scalars keep their raw text. Known unlocked divergences (documented,

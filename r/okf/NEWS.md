@@ -8,6 +8,12 @@
   design: every conformance-asserted value is computed in memory, which also
   documents that DuckDB is an access mechanism of the R/Python checkers, not
   part of the behavioral contract. No html/doctor/RAG/CLI in Rust.
+* New C++ binding (`cpp/`, C++17 static library, CMake + FetchContent:
+  rapidyaml + nlohmann/json + vendored SHA-1): the same fixture-locked core,
+  conformance-gated in CI (`conformance/check_cpp.sh`, ctest on ubuntu +
+  windows/MSVC). Fetch is descoped to dir / local tar (system `tar`) / git;
+  zip and remote archives stay R/Python-only. Float parity pinned by
+  `-ffp-contract=off` / `/fp:precise`.
 
 # okf 0.9.0
 

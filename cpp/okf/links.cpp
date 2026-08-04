@@ -1,0 +1,193 @@
+// Link extraction + resolution — mirrors py/okf/okf.py (extract_links,
+// extract_wikilinks, _wiki_index, resolve_wiki, _norm, resolve_link, links).
+
+#include <algorithm>
+#include <cctype>
+#include <map>
+#include <regex>
+
+#include "okf.hpp"
+
+namespace okf {
+namespace {
+
+const std::regex& re_link() {
+    static const std::regex re(R"(\]\(\s*([^)\s]+))");
+    return re;
+}
+const std::regex& re_wikilink() {
+    static const std::regex re(R"(\[\[([^\]]+)\]\])");
+    return re;
+}
+const std::regex& re_scheme() {
+    static const std::regex re(R"(^[a-zA-Z][a-zA-Z0-9+.-]*:)");
+    return re;
+}
+
+std::string lower_ascii(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return s;
+}
+
+std::string trim(const std::string& s) {
+    std::size_t a = s.find_first_not_of(" \t\f\v\r\n");
+    if (a == std::string::npos) return "";
+    std::size_t b = s.find_last_not_of(" \t\f\v\r\n");
+    return s.substr(a, b - a + 1);
+}
+
+std::string before_hash(const std::string& s) { return s.substr(0, s.find('#')); }
+
+// str(scalar) on a JSON value from frontmatter (scalars are strings already
+// under the rapidyaml mapping; keep a fallback for completeness).
+std::string json_scalar_str(const json& v) {
+    if (v.is_string()) return v.get<std::string>();
+    return v.dump();
+}
+
+struct WikiIndex {
+    // kind order: id, alias, title, stem (resolution precedence)
+    std::map<std::string, std::string> maps[4];
+};
+
+void wiki_add(std::map<std::string, std::string>& map, std::set<std::string>& amb,
+              const std::string& raw_key, const std::string& path) {
+    std::string key = lower_ascii(trim(raw_key));
+    if (key.empty()) return;
+    auto it = map.find(key);
+    if (it != map.end() && it->second != path) amb.insert(key);
+    map[key] = path;
+}
+
+WikiIndex wiki_index(const std::vector<Concept>& concepts) {
+    WikiIndex idx;
+    std::set<std::string> amb[4];
+    for (const Concept& c : concepts) {
+        if (c.frontmatter.is_object()) {
+            auto id = c.frontmatter.find("id");
+            if (id != c.frontmatter.end() && !id->is_null()) {
+                wiki_add(idx.maps[0], amb[0], json_scalar_str(*id), c.path);
+            }
+            auto aliases = c.frontmatter.find("aliases");
+            if (aliases != c.frontmatter.end() && aliases->is_array()) {
+                for (const json& a : *aliases) {
+                    wiki_add(idx.maps[1], amb[1], json_scalar_str(a), c.path);
+                }
+            }
+        }
+        if (c.title && !c.title->empty()) wiki_add(idx.maps[2], amb[2], *c.title, c.path);
+        std::size_t slash = c.path.rfind('/');
+        std::string base = slash == std::string::npos ? c.path : c.path.substr(slash + 1);
+        std::size_t dot = base.rfind('.');
+        std::string stem = dot == std::string::npos ? base : base.substr(0, dot);
+        wiki_add(idx.maps[3], amb[3], stem, c.path);
+    }
+    for (int k = 0; k < 4; ++k) {
+        for (const std::string& key : amb[k]) idx.maps[k].erase(key);
+    }
+    return idx;
+}
+
+std::optional<std::string> resolve_wiki(const std::string& raw, const WikiIndex& idx,
+                                        const std::set<std::string>& known) {
+    std::string ref = trim(before_hash(raw));
+    if (ref.empty()) return std::nullopt;
+    if (known.count(ref)) return ref;
+    std::string cand = ref.size() >= 3 && ref.compare(ref.size() - 3, 3, ".md") == 0
+                           ? ref
+                           : ref + ".md";
+    if (known.count(cand)) return cand;
+    std::string lref = lower_ascii(ref);
+    for (int k = 0; k < 4; ++k) {
+        auto it = idx.maps[k].find(lref);
+        if (it != idx.maps[k].end()) return it->second;
+    }
+    return std::nullopt;
+}
+
+// Normalize a slash path: drop empty/"." segments, apply "..".
+std::string norm(const std::string& p) {
+    std::string slashed = p;
+    std::replace(slashed.begin(), slashed.end(), '\\', '/');
+    std::vector<std::string> out;
+    std::size_t start = 0;
+    while (start <= slashed.size()) {
+        std::size_t sl = slashed.find('/', start);
+        std::string seg =
+            sl == std::string::npos ? slashed.substr(start) : slashed.substr(start, sl - start);
+        if (seg == "..") {
+            if (!out.empty()) out.pop_back();
+        } else if (!seg.empty() && seg != ".") {
+            out.push_back(seg);
+        }
+        if (sl == std::string::npos) break;
+        start = sl + 1;
+    }
+    std::string joined;
+    for (std::size_t i = 0; i < out.size(); ++i) {
+        if (i) joined.push_back('/');
+        joined += out[i];
+    }
+    return joined;
+}
+
+bool is_external(const std::string& raw) {
+    std::string t = before_hash(raw);
+    return std::regex_search(t, re_scheme());
+}
+
+std::optional<std::string> resolve_link(const std::string& raw, const std::string& src_rel,
+                                        const std::set<std::string>& known) {
+    std::string t = before_hash(raw);
+    std::string cand;
+    if (!t.empty() && t[0] == '/') {
+        cand = t.substr(1);
+    } else {
+        std::size_t slash = src_rel.rfind('/');
+        cand = slash == std::string::npos ? t : src_rel.substr(0, slash) + "/" + t;
+    }
+    cand = norm(cand);
+    if (known.count(cand)) return cand;
+    return std::nullopt;
+}
+
+}  // namespace
+
+std::vector<std::string> extract_links(const std::string& body) {
+    std::vector<std::string> out;
+    for (auto it = std::sregex_iterator(body.begin(), body.end(), re_link());
+         it != std::sregex_iterator(); ++it) {
+        out.push_back((*it)[1].str());
+    }
+    return out;
+}
+
+std::vector<std::string> extract_wikilinks(const std::string& body) {
+    std::vector<std::string> out;
+    for (auto it = std::sregex_iterator(body.begin(), body.end(), re_wikilink());
+         it != std::sregex_iterator(); ++it) {
+        std::string m = (*it)[1].str();
+        out.push_back(trim(m.substr(0, m.find('|'))));
+    }
+    return out;
+}
+
+std::vector<Link> links(const Bundle& b) {
+    WikiIndex idx = wiki_index(b.concepts);
+    std::vector<Link> out;
+    for (const Concept& c : b.concepts) {
+        for (const std::string& raw : c.links_raw) {
+            if (is_external(raw)) continue;
+            std::optional<std::string> dst = resolve_link(raw, c.path, b.known);
+            out.push_back(Link{c.path, raw, dst, dst.has_value()});
+        }
+        for (const std::string& raw : c.wikilinks_raw) {
+            std::optional<std::string> dst = resolve_wiki(raw, idx, b.known);
+            out.push_back(Link{c.path, raw, dst, dst.has_value()});
+        }
+    }
+    return out;
+}
+
+}  // namespace okf

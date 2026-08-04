@@ -74,6 +74,22 @@ jobs:
       - name: Tests + conformance + dogfood
         run: cargo test
 
+  cpp:
+    name: cpp (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build cpp/build --config Release
+      - name: Conformance + dogfood (ctest)
+        run: ctest --test-dir cpp/build --output-on-failure -C Release
+
   R-CMD-check:
     name: R CMD check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

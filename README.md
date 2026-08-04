@@ -172,7 +172,7 @@ The interoperability **core is a contract, not compiled code**:
 1. **`schema/catalog.sql`** — the DuckDB catalog schema. Both bindings write matching catalogs (same rows, types, links, validation, and `content_hash` — a parity-locked conformance test enforces this); the `frontmatter` JSON column is semantically equal but not byte-for-byte identical across languages. You can query the catalog with the bare `duckdb` CLI, no library at all.
 2. **`conformance/`** — language-agnostic golden bundles + expected outputs that every binding must reproduce.
 
-The **bindings** (`r/okf`, `py/okf`, `rust/okf-ingest`) are thin, native packages kept in lockstep by that shared corpus. This matches OKF's own ethos ("no required tooling — if you can `cat` a file you can read OKF") far better than a heavyweight FFI core would. R and Python carry the full surface (catalog, CLI, html, doctor, RAG); the Rust crate implements the fixture-locked core (parse / validate / links / ingest summary / rank / seeds / diff / fetch) with no catalog dependency.
+The **bindings** (`r/okf`, `py/okf`, `rust/okf-ingest`, `cpp/`) are thin, native packages kept in lockstep by that shared corpus. This matches OKF's own ethos ("no required tooling — if you can `cat` a file you can read OKF") far better than a heavyweight FFI core would. R and Python carry the full surface (catalog, CLI, html, doctor, RAG); the Rust crate and the C++ library implement the fixture-locked core (parse / validate / links / ingest summary / rank / seeds / diff / fetch) with no catalog dependency.
 
 ## What it enforces (and tolerates)
 
@@ -489,6 +489,7 @@ okf query cat.duckdb --search revenue                     # Python reads
 Rscript conformance/check_r.R       # R binding vs expected/*.json
 python  conformance/check_py.py     # Python binding vs expected/*.json
 bash    conformance/check_rust.sh   # Rust binding (cargo test --test conformance)
+bash    conformance/check_cpp.sh    # C++ binding (cmake + ctest -R conformance)
 ```
 
 ## Layout
@@ -500,6 +501,7 @@ docs/                   ARCHITECTURE.md, SPEC_NOTES.md
 r/okf/                  R binding (full surface)
 py/okf/                 Python binding (full surface)
 rust/okf-ingest/        Rust binding (fixture-locked core, catalog-free)
+cpp/                    C++ binding (fixture-locked core, catalog-free; CMake)
 ```
 
 ## Status
@@ -510,10 +512,12 @@ catalog: **validate → ingest → query → context → render (`html` / `graph
 `export` `--mermaid`) → `impact` → `rank` → `doctor` → `diff` → embed → rag**, with
 `--incremental` ingest/embed and dir/git/tar/zip sources. Packaged to
 [PyPI](https://pypi.org/project/okf-ingest/) and
-[R-universe](https://travisjakel.r-universe.dev/okf). A third binding,
-`rust/okf-ingest`, implements the conformance core (parse / validate / links /
-ingest summary / rank / seeds / diff / fetch) as a pure-Rust crate —
-byte-identical on the shared fixtures, no html/doctor/RAG/CLI.
+[R-universe](https://travisjakel.r-universe.dev/okf). Two further bindings
+implement the conformance core (parse / validate / links / ingest summary /
+rank / seeds / diff / fetch) byte-identical on the shared fixtures, with no
+html/doctor/RAG/CLI: `rust/okf-ingest` (pure-Rust crate, on
+[crates.io](https://crates.io/crates/okf-ingest)) and `cpp/` (C++17 static
+library, CMake + FetchContent, rapidyaml + nlohmann/json).
 
 The feature surface is complete and the conformance contract is locked, so the
 package is **stable** — safe to depend on. It is **lightly maintained**: expect
