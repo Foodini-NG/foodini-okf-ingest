@@ -172,7 +172,7 @@ The interoperability **core is a contract, not compiled code**:
 1. **`schema/catalog.sql`** — the DuckDB catalog schema. Both bindings write matching catalogs (same rows, types, links, validation, and `content_hash` — a parity-locked conformance test enforces this); the `frontmatter` JSON column is semantically equal but not byte-for-byte identical across languages. You can query the catalog with the bare `duckdb` CLI, no library at all.
 2. **`conformance/`** — language-agnostic golden bundles + expected outputs that every binding must reproduce.
 
-The **bindings** (`r/okf`, `py/okf`) are thin, native, ~300-line packages kept in lockstep by that shared corpus. This matches OKF's own ethos ("no required tooling — if you can `cat` a file you can read OKF") far better than a heavyweight FFI core would.
+The **bindings** (`r/okf`, `py/okf`, `rust/okf-ingest`) are thin, native packages kept in lockstep by that shared corpus. This matches OKF's own ethos ("no required tooling — if you can `cat` a file you can read OKF") far better than a heavyweight FFI core would. R and Python carry the full surface (catalog, CLI, html, doctor, RAG); the Rust crate implements the fixture-locked core (parse / validate / links / ingest summary / rank / seeds / diff / fetch) with no catalog dependency.
 
 ## What it enforces (and tolerates)
 
@@ -190,6 +190,9 @@ options(repos = c(travisjakel = "https://travisjakel.r-universe.dev",
 install.packages("okf")
 # …or from a clone:
 R CMD INSTALL r/okf         # (or: remotes::install_local("r/okf"))
+
+# Rust — the fixture-locked core as a crate
+cargo add okf-ingest        # (or from a clone: path = "rust/okf-ingest")
 ```
 
 Optional extras: `pip install okf-ingest[html]` (or R `install.packages("commonmark")`)
@@ -241,12 +244,12 @@ DuckDB at all, three functions hand you the whole model as plain data structures
 (R: data frames / lists; Python: dicts / dataclasses) and **never go through the
 catalog**:
 
-| | R | Python | Gives you |
-|---|---|---|---|
-| Parse | `okf_read()` | `read_bundle()` | concepts (frontmatter + body) |
-| Lint / health | `okf_validate()` | `validate()` | the *same* findings `doctor` reports — broken links, orphans, missing fields, non-ISO timestamps |
-| Graph | `okf_links()` | `links()` | resolved + broken edges (markdown **and** `[[wikilinks]]`) |
-| Diff | `okf_diff(a, b)` | `diff(a, b)` | dir-vs-dir changelog (concepts, types, edges) — the catalog only enters if a side *is* one |
+| | R | Python | Rust | Gives you |
+|---|---|---|---|---|
+| Parse | `okf_read()` | `read_bundle()` | `read_bundle()` | concepts (frontmatter + body) |
+| Lint / health | `okf_validate()` | `validate()` | `validate()` | the *same* findings `doctor` reports — broken links, orphans, missing fields, non-ISO timestamps |
+| Graph | `okf_links()` | `links()` | `links()` | resolved + broken edges (markdown **and** `[[wikilinks]]`) |
+| Diff | `okf_diff(a, b)` | `diff(a, b)` | `diff(a, b)` | dir-vs-dir changelog (concepts, types, edges) — the catalog only enters if a side *is* one |
 
 ```r
 rd  <- okf_read("my-bundle")        # no DuckDB
@@ -260,6 +263,12 @@ b   = okf.read_bundle("my-bundle")  # no DuckDB
 val = okf.validate(b)               # list of findings
 lk  = okf.links(b)                  # the edge graph
 [e for e in lk if not e["resolved"]]
+```
+
+```rust
+// The Rust crate IS this layer (plus rank/seeds/diff/fetch), catalog-free:
+let ing = okf_ingest::ingest("my-bundle")?;   // summary + findings + links in memory
+let broken: Vec<_> = ing.links.iter().filter(|l| !l.resolved).collect();
 ```
 
 Reach for the catalog (`okf_ingest`) when you want what a SQL engine is *for*:
@@ -479,6 +488,7 @@ okf query cat.duckdb --search revenue                     # Python reads
 ```bash
 Rscript conformance/check_r.R       # R binding vs expected/*.json
 python  conformance/check_py.py     # Python binding vs expected/*.json
+bash    conformance/check_rust.sh   # Rust binding (cargo test --test conformance)
 ```
 
 ## Layout
@@ -487,8 +497,9 @@ python  conformance/check_py.py     # Python binding vs expected/*.json
 schema/catalog.sql      core: the catalog schema (interop contract)
 conformance/            core: golden bundles + expected outputs + per-lang checks
 docs/                   ARCHITECTURE.md, SPEC_NOTES.md
-r/okf/                  R binding
-py/okf/                 Python binding
+r/okf/                  R binding (full surface)
+py/okf/                 Python binding (full surface)
+rust/okf-ingest/        Rust binding (fixture-locked core, catalog-free)
 ```
 
 ## Status
@@ -499,7 +510,10 @@ catalog: **validate → ingest → query → context → render (`html` / `graph
 `export` `--mermaid`) → `impact` → `rank` → `doctor` → `diff` → embed → rag**, with
 `--incremental` ingest/embed and dir/git/tar/zip sources. Packaged to
 [PyPI](https://pypi.org/project/okf-ingest/) and
-[R-universe](https://travisjakel.r-universe.dev/okf).
+[R-universe](https://travisjakel.r-universe.dev/okf). A third binding,
+`rust/okf-ingest`, implements the conformance core (parse / validate / links /
+ingest summary / rank / seeds / diff / fetch) as a pure-Rust crate —
+byte-identical on the shared fixtures, no html/doctor/RAG/CLI.
 
 The feature surface is complete and the conformance contract is locked, so the
 package is **stable** — safe to depend on. It is **lightly maintained**: expect

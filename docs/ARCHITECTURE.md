@@ -15,11 +15,17 @@ Instead the **core is two portable, language-neutral artifacts**, and the
 |-------|----------|------|
 | Core  | `schema/catalog.sql` | The DuckDB catalog schema — the interop contract. Both bindings emit identical catalogs; queryable with the bare `duckdb` CLI. |
 | Core  | `conformance/` | Golden bundles + `expected/*.json`. The behavioral contract every binding reproduces. |
-| Binding | `r/okf/` | R: yaml, DBI, duckdb, digest, jsonlite. |
-| Binding | `py/okf/` | Python: pyyaml, duckdb (stdlib hashlib/json). |
+| Binding | `r/okf/` | R: yaml, DBI, duckdb, digest, jsonlite. Full surface. |
+| Binding | `py/okf/` | Python: pyyaml, duckdb (stdlib hashlib/json). Full surface. |
+| Binding | `rust/okf-ingest/` | Rust: yaml-rust2, sha1, regex, serde_json, tar/flate2/zip. Fixture-locked core only, catalog-free. |
 
-A new binding (TS, Go, …) is conformant the moment it produces the same catalog
-and passes `conformance/`.
+A new binding (TS, Go, …) is conformant the moment it passes `conformance/`.
+The Rust binding demonstrates that the catalog itself is not part of the
+behavioral contract: every conformance-asserted value (summary fields, content
+hashes, findings, link resolutions, PPR scores, diff deltas) is derivable from
+the in-memory ingest result — DuckDB is the R/Python checkers' *access
+mechanism*, not the contract. A binding that skips the catalog is still fully
+conformant on the core.
 
 ## Data flow (identical in both bindings)
 
@@ -88,7 +94,7 @@ dependency is a markdown engine, optional and guarded (`commonmark` Suggests in
 R; the `okf-ingest[html]` extra in Python). Link resolution reuses
 `okf_resolve_link`, so the rendered graph matches the validated graph exactly.
 
-## Parity notes (where the two languages had to be aligned)
+## Parity notes (where the languages had to be aligned)
 
 - **Timestamps**: PyYAML coerces ISO datetimes to `datetime`; R keeps them as
   strings. The Python loader (`_OKFLoader`) drops the timestamp implicit
@@ -107,6 +113,17 @@ R; the `okf-ingest[html]` extra in Python). Link resolution reuses
 - **`n_concepts`** counts non-reserved concept documents; `index.md`/`log.md`
   are catalogued (`reserved = true`) but not counted as concepts (OKF: "all
   other `.md` files are concept documents").
+- **Rust specifics**: yaml-rust2 speaks YAML 1.2 core schema — there is no
+  timestamp tag, so verbatim timestamps come free (no custom loader needed);
+  float scalars keep their raw text. Known unlocked divergences (documented,
+  not chased; no fixture covers them): unquoted `yes`/`no`/`on`/`off` are bools
+  in PyYAML (1.1) but strings in 1.2, and boolean scalars stringify as
+  `True`/`true`/`TRUE` across Python/Rust/R. PPR uses `f64` with the same
+  sorted-edge accumulation order as Python and decimal round-half-even via
+  fixed-precision formatting, so scores are bit-identical. Concepts sort by
+  *relative* forward-slash path in byte order (Python sorts absolute paths —
+  equivalent on the fixtures, and the relative sort is the safer invariant on
+  Windows).
 
 ## Roadmap
 

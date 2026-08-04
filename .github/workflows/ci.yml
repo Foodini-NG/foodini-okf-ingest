@@ -49,6 +49,31 @@ jobs:
           okf validate docs/okf-bundle --strict      # dogfood bundle stays conformant
           okf doctor docs/okf-bundle --strict         # …and healthy (100/100)
 
+  rust:
+    name: rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: rust/okf-ingest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/okf-ingest
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Tests + conformance + dogfood
+        run: cargo test
+
   R-CMD-check:
     name: R CMD check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

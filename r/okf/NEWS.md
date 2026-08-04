@@ -1,3 +1,14 @@
+# okf (development version)
+
+* New Rust binding (`rust/okf-ingest`, crates.io `okf-ingest`): the
+  fixture-locked core — parse + `content_hash`, links/wikilinks, validate,
+  ingest summary, exact PPR + lexical seeds + query cascade, diff (incl. drift
+  mode), fetch (dir/tar/zip/git) — as a pure-Rust crate, conformance-gated in
+  CI alongside R and Python (`conformance/check_rust.sh`). Catalog-free by
+  design: every conformance-asserted value is computed in memory, which also
+  documents that DuckDB is an access mechanism of the R/Python checkers, not
+  part of the behavioral contract. No html/doctor/RAG/CLI in Rust.
+
 # okf 0.9.0
 
 * Query-seeded retrieval: new `okf_seeds()` (deterministic lexical seed

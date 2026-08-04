@@ -17,6 +17,9 @@ src/*.o
 src/*.so
 src/*.dll
 
+# Rust
+rust/okf-ingest/target/
+
 # Catalogs / scratch
 *.duckdb
 *.duckdb.wal
