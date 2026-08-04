@@ -9,6 +9,9 @@ homepage = "https://github.com/travisjakel/okf-ingest"
 keywords = ["knowledge-base", "markdown", "wiki", "pagerank", "okf"]
 categories = ["parser-implementations", "text-processing"]
 readme = "README.md"
+# Integration tests assert against ../../conformance (repo-only fixtures) —
+# they cannot pass from the published tarball, so keep them out of it.
+exclude = ["tests/"]
 
 [dependencies]
 flate2 = "1.1.9"
