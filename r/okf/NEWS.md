@@ -14,6 +14,12 @@
   windows/MSVC). Fetch is descoped to dir / local tar (system `tar`) / git;
   zip and remote archives stay R/Python-only. Float parity pinned by
   `-ffp-contract=off` / `/fp:precise`.
+* New MATLAB binding (`matlab/+okf`, pure MATLAB, Octave-compatible, zero
+  toolboxes): the same fixture-locked core, conformance-gated in CI on real
+  MATLAB (`conformance/check_matlab.sh`, matlab-actions). Ships a verbatim
+  YAML-subset parser and a pure-M SHA-1; PPR rounding uses sprintf-based
+  half-even (MATLAB `round()` is half-away-from-zero). Fetch covers
+  dir / tar / zip / git with a post-extraction containment check.
 
 # okf 0.9.0
 

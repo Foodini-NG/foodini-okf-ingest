@@ -1,0 +1,110 @@
+function b = read_bundle(root, source_kind)
+%READ_BUNDLE Read an OKF bundle directory -- mirrors py read_bundle.
+%   Hidden directories skipped; only *.md files not starting with '.';
+%   concepts sorted by bundle-relative forward-slash path (byte order).
+if nargin < 2
+    source_kind = 'dir';
+end
+old = cd(root);
+root_abs = pwd;
+cd(old);
+root_str = strrep(root_abs, '\', '/');
+
+files = walk_md(root_abs, {});
+rels = cell(1, numel(files));
+for i = 1:numel(files)
+    rel = files{i}(numel(root_abs) + 2:end);
+    rels{i} = strrep(rel, '\', '/');
+end
+[rels, order] = sort(rels);
+files = files(order);
+
+reserved_names = {'index.md', 'log.md'};
+concepts = struct('path', {}, 'reserved', {}, 'type', {}, 'title', {}, ...
+                  'description', {}, 'resource', {}, 'tags', {}, 'timestamp', {}, ...
+                  'body', {}, 'frontmatter', {}, 'parse_error', {}, ...
+                  'links_raw', {}, 'wikilinks_raw', {}, 'content_hash', {});
+for i = 1:numel(files)
+    fid = fopen(files{i}, 'rb');
+    bytes = fread(fid, Inf, '*uint8')';
+    fclose(fid);
+    txt = native2unicode(bytes, 'UTF-8');
+    p = okf.parse_text(txt);
+
+    c = struct();
+    c.path = rels{i};
+    slash = find(rels{i} == '/', 1, 'last');
+    if isempty(slash)
+        base = rels{i};
+    else
+        base = rels{i}(slash + 1:end);
+    end
+    c.reserved = any(strcmp(base, reserved_names));
+    c.type = meta_scalar(p.meta, 'type');
+    c.title = meta_scalar(p.meta, 'title');
+    c.description = meta_scalar(p.meta, 'description');
+    c.resource = meta_scalar(p.meta, 'resource');
+    c.tags = meta_get(p.meta, 'tags');       % char, cellstr, or []
+    c.timestamp = meta_scalar(p.meta, 'timestamp');
+    c.body = p.body;
+    c.frontmatter = p.meta;                  % Map or []
+    c.parse_error = p.err;                   % '' when clean
+    c.links_raw = okf.extract_links(p.body);
+    c.wikilinks_raw = okf.extract_wikilinks(p.body);
+    c.content_hash = okf.content_hash(p.body);
+    concepts(end + 1) = c; %#ok<AGROW>
+end
+
+b = struct();
+b.bundle_id = okf.content_hash(root_str);
+b.root = root_str;
+b.source_kind = source_kind;
+b.concepts = concepts;
+b.known = rels;
+b.okf_version = '';
+for i = 1:numel(concepts)
+    if strcmp(concepts(i).path, 'index.md')
+        v = meta_scalar(concepts(i).frontmatter, 'okf_version');
+        if ~isempty(v)
+            b.okf_version = v;
+        end
+        break;
+    end
+end
+end
+
+function files = walk_md(d, files)
+entries = dir(d);
+% deterministic order not required here (concepts re-sorted by rel path)
+for i = 1:numel(entries)
+    name = entries(i).name;
+    if strcmp(name, '.') || strcmp(name, '..')
+        continue;
+    end
+    full = fullfile(d, name);
+    if entries(i).isdir
+        if name(1) ~= '.'
+            files = walk_md(full, files);
+        end
+    elseif name(1) ~= '.' && numel(name) > 3 && strcmp(name(end - 2:end), '.md')
+        files{end + 1} = full; %#ok<AGROW>
+    end
+end
+end
+
+function v = meta_get(meta, key)
+v = [];
+if isa(meta, 'containers.Map') && isKey(meta, key)
+    v = meta(key);
+end
+end
+
+function s = meta_scalar(meta, key)
+%META_SCALAR The _s() of the Python binding: '' for missing/sequence/null.
+v = meta_get(meta, key);
+if ischar(v)
+    s = v;
+else
+    s = '';
+end
+end

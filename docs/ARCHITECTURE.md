@@ -19,6 +19,7 @@ Instead the **core is two portable, language-neutral artifacts**, and the
 | Binding | `py/okf/` | Python: pyyaml, duckdb (stdlib hashlib/json). Full surface. |
 | Binding | `rust/okf-ingest/` | Rust: yaml-rust2, sha1, regex, serde_json, tar/flate2/zip. Fixture-locked core only, catalog-free. |
 | Binding | `cpp/` | C++17: rapidyaml, nlohmann/json, vendored SHA-1; system `tar`/`git` for fetch. Fixture-locked core only, catalog-free. |
+| Binding | `matlab/+okf/` | Pure MATLAB (Octave-compatible, zero toolboxes): minimal YAML-subset parser, pure-M SHA-1, jsonencode, untar/unzip builtins. Fixture-locked core only, catalog-free. |
 
 A new binding (TS, Go, …) is conformant the moment it passes `conformance/`.
 The Rust binding demonstrates that the catalog itself is not part of the
@@ -114,6 +115,20 @@ R; the `okf-ingest[html]` extra in Python). Link resolution reuses
 - **`n_concepts`** counts non-reserved concept documents; `index.md`/`log.md`
   are catalogued (`reserved = true`) but not counted as concepts (OKF: "all
   other `.md` files are concept documents").
+- **MATLAB specifics**: no YAML library exists that keeps timestamps verbatim
+  (yamlmatlab coerces dates — exactly the forbidden behavior), so the binding
+  ships a ~150-line YAML-subset parser (`okf.yaml_parse`): flat `key: value`,
+  quoted strings, flow/block sequences, everything verbatim text;
+  out-of-subset constructs raise the spec-sanctioned `yaml_parse_error`.
+  MATLAB `round()` is round-half-AWAY-from-zero — `okf.round_dec`
+  (`sprintf('%.*f')` + `str2double`) provides the half-even rounding the PPR
+  score lock requires. SHA-1 is a pure-M implementation (no Java — future
+  MATLAB releases drop the JVM). Sorting/tie-breaks use explicit two-key
+  `sortrows` (never relying on sort stability). Archive fetch extracts into a
+  fresh temp dir and containment-checks every returned path afterwards
+  (untar/unzip cannot list members pre-extraction; MATLAB returns absolute
+  paths, Octave member-relative — both handled). The code stays inside the
+  MATLAB/Octave-common subset and CI runs real MATLAB.
 - **C++ specifics**: rapidyaml keeps every scalar as raw text (no implicit
   typing), so verbatim timestamps and `"0.1"` come free; frontmatter scalars
   land in JSON as strings (semantically equal, not byte-locked). PPR parity
