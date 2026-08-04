@@ -1,6 +1,6 @@
-## Update: 0.7.0 -> 0.9.0
+## Update: 0.7.0 -> 0.10.0
 
-Second update; consolidates two additive releases (see NEWS.md):
+Second update; consolidates three additive releases (see NEWS.md):
 
 * 0.8.0 — `okf_rank()`: Personalized PageRank relevance over the concept
   graph, computed by exact power iteration (deterministic); `okf_context()`
@@ -9,6 +9,9 @@ Second update; consolidates two additive releases (see NEWS.md):
   serves free-text queries via deterministic lexical seeding; `okf_doctor()`
   gains duplicate-identity and (info-severity) hub-concentration checks;
   `reviewed: true` pages are protected from `okf_doctor_fix()`.
+* 0.10.0 — no R code changes: version kept in lockstep with the repository's
+  new Rust, C++, and MATLAB bindings (all held byte-identical to the R
+  binding by the shared conformance corpus).
 
 No API changes or removals; all additive and offline (no new dependencies).
 

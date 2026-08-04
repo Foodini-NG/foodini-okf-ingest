@@ -1,4 +1,4 @@
-# okf (development version)
+# okf 0.10.0
 
 * New Rust binding (`rust/okf-ingest`, crates.io `okf-ingest`): the
   fixture-locked core — parse + `content_hash`, links/wikilinks, validate,
