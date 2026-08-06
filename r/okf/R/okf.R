@@ -177,7 +177,12 @@ okf_read <- function(root, bundle_id = NULL, source_kind = "dir") {
     list(path = rel_of(f), reserved = basename(f) %in% OKF_RESERVED,
          type = .s(p$meta$type), title = .s(p$meta$title),
          description = .s(p$meta$description), resource = .s(p$meta$resource),
-         tags = p$meta$tags, timestamp = .s(p$meta$timestamp),
+         tags = p$meta$tags,
+         # OKF v0.2: `generated: {by, at}` replaces `timestamp`; consumers
+         # fall back to the legacy field when `generated` is absent (spec
+         # section 13). `$` on NULL is NULL-safe.
+         timestamp = .s(if (!is.null(p$meta$timestamp)) p$meta$timestamp
+                        else p$meta$generated$at),
          body = p$body, frontmatter = p$meta, parse_error = p$err,
          links_raw = okf_extract_links(p$body),
          wikilinks_raw = okf_extract_wikilinks(p$body),

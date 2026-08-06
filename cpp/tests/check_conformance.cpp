@@ -143,6 +143,41 @@ int main(int argc, char** argv) {
         check<json>("wikilinks." + key, got, it.value());
     }
 
+    // --- v0.2 (generated/sources/verified; generated.at timestamp fallback) ---
+    okf::Ingested ingv = okf::ingest((here / "bundles/v02").string());
+    json expv = load(here / "expected/v02.json");
+    check<std::string>("v02.okf_version", opt_str(ingv.bundle.okf_version),
+                       expv["bundle"]["okf_version"].get<std::string>());
+    check<std::size_t>("v02.n_concepts", ingv.summary.n_concepts,
+                       expv["bundle"]["n_concepts"].get<std::size_t>());
+    check<bool>("v02.conformant", ingv.summary.conformant,
+                expv["bundle"]["conformant"].get<bool>());
+    check<std::size_t>("v02.errors", ingv.summary.errors,
+                       expv["validation"]["errors"].get<std::size_t>());
+    check<std::size_t>("v02.warnings", ingv.summary.warnings,
+                       expv["validation"]["warnings"].get<std::size_t>());
+    check<std::size_t>("v02.links_total", ingv.summary.links_total,
+                       expv["links"]["total"].get<std::size_t>());
+    check<std::size_t>("v02.links_broken", ingv.summary.links_broken,
+                       expv["links"]["broken"].get<std::size_t>());
+    for (const json& fr : expv["validation"]["forbidden_rules"]) {
+        std::string rule = fr.get<std::string>();
+        bool present = false;
+        for (const okf::Finding& f : ingv.findings) {
+            if (f.rule == rule) present = true;
+        }
+        check<bool>("v02.no_" + rule, present, false);
+    }
+    for (auto it = expv["timestamps"].begin(); it != expv["timestamps"].end(); ++it) {
+        if (!it.key().empty() && it.key()[0] == '_') continue;
+        std::string got;
+        for (const okf::Concept& cc : ingv.bundle.concepts) {
+            if (cc.path == it.key()) got = cc.timestamp.value_or("");
+        }
+        check<std::string>("v02.timestamp[" + it.key() + "]", got,
+                           it.value().get<std::string>());
+    }
+
     // --- rank (Personalized PageRank: exact, deterministic, parity-locked) ---
     okf::Ingested ingr = okf::ingest((here / "bundles/store").string());
     json expr = load(here / "expected/rank.json");

@@ -1,3 +1,21 @@
+# okf 0.11.0
+
+* OKF spec v0.2 core support, in all five bindings: the concept `timestamp`
+  (and catalog column) now falls back to v0.2's `generated: {by, at}` when
+  the legacy field is absent (spec section 13), so pure-v0.2 bundles no longer
+  draw spurious `missing_timestamp` warnings; the new `sources` / `verified` /
+  `usage_window` / `status` / `stale_after` families parse and are preserved
+  verbatim in `frontmatter`. New conformance fixture `bundles/v02` locks the
+  fallback and the parsed shapes cross-binding.
+* MATLAB: the verbatim YAML-subset parser now covers v0.2's nested shapes —
+  flow maps (`generated: { by, at }`), one-level block maps, and block
+  sequences of maps (`sources:`) — previously these raised
+  `yaml_parse_error`, making v0.2 bundles read non-conformant under the
+  MATLAB binding only. Deeper nesting still errors (spec-sanctioned).
+* Docs: SPEC_NOTES rewritten for v0.2 (what is implemented, what is
+  deliberately skipped: legacy `# Citations` parsing, trust-tier surfaces).
+  v0.1 bundles remain fully supported; hard conformance rules are unchanged.
+
 # okf 0.10.0
 
 * New Rust binding (`rust/okf-ingest`, crates.io `okf-ingest`): the

@@ -1,0 +1,22 @@
+{
+  "bundle": {
+    "okf_version": "0.2",
+    "n_files": 3,
+    "n_concepts": 2,
+    "n_conformant": 2,
+    "conformant": true,
+    "_note": "v0.2 bundle: generated/sources/verified/status/stale_after parse in every binding; no concept may be rejected or warned for using generated instead of legacy timestamp"
+  },
+  "validation": {
+    "errors": 0,
+    "warnings": 0,
+    "forbidden_rules": ["missing_timestamp", "timestamp_not_iso8601", "frontmatter_unparseable"]
+  },
+  "links": { "total": 6, "broken": 0 },
+  "timestamps": {
+    "_note": "Concept.timestamp resolves to frontmatter timestamp, falling back to generated.at (OKF v0.2 SS13 fallback) -- parity-locked across all bindings",
+    "index.md": "2026-08-01T00:00:00Z",
+    "widget.md": "2026-08-01T00:00:00Z",
+    "legacy.md": "2026-06-19T09:30:00Z"
+  }
+}

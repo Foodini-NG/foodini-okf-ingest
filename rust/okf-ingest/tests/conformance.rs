@@ -158,6 +158,66 @@ fn conformance() {
         c.check(&format!("wikilinks.{key}"), got, want_s);
     }
 
+    // --- v0.2 (generated/sources/verified; generated.at timestamp fallback) ---
+    let ingv = ingest(here.join("bundles/v02").to_str().unwrap()).unwrap();
+    let expv = load("expected/v02.json");
+    c.check(
+        "v02.okf_version",
+        ingv.bundle.okf_version.clone().unwrap_or_default(),
+        expv["bundle"]["okf_version"].as_str().unwrap().to_string(),
+    );
+    c.check(
+        "v02.n_concepts",
+        ingv.summary.n_concepts as u64,
+        expv["bundle"]["n_concepts"].as_u64().unwrap(),
+    );
+    c.check(
+        "v02.conformant",
+        ingv.summary.conformant,
+        expv["bundle"]["conformant"].as_bool().unwrap(),
+    );
+    c.check(
+        "v02.errors",
+        ingv.summary.errors as u64,
+        expv["validation"]["errors"].as_u64().unwrap(),
+    );
+    c.check(
+        "v02.warnings",
+        ingv.summary.warnings as u64,
+        expv["validation"]["warnings"].as_u64().unwrap(),
+    );
+    c.check(
+        "v02.links_total",
+        ingv.summary.links_total as u64,
+        expv["links"]["total"].as_u64().unwrap(),
+    );
+    c.check(
+        "v02.links_broken",
+        ingv.summary.links_broken as u64,
+        expv["links"]["broken"].as_u64().unwrap(),
+    );
+    for fr in expv["validation"]["forbidden_rules"].as_array().unwrap() {
+        let fr = fr.as_str().unwrap();
+        let present = ingv.findings.iter().any(|f| f.rule == fr);
+        c.check(&format!("v02.no_{fr}"), present, false);
+    }
+    for (pth, want) in expv["timestamps"].as_object().unwrap() {
+        if pth.starts_with('_') {
+            continue;
+        }
+        let got = ingv
+            .bundle
+            .concepts
+            .iter()
+            .find(|x| &x.path == pth)
+            .and_then(|x| x.timestamp.clone());
+        c.check(
+            &format!("v02.timestamp[{pth}]"),
+            got,
+            want.as_str().map(str::to_string),
+        );
+    }
+
     // --- rank (Personalized PageRank: exact, deterministic, parity-locked) ---
     let ingr = ingest(here.join("bundles/store").to_str().unwrap()).unwrap();
     let expr = load("expected/rank.json");

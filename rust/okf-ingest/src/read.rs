@@ -64,7 +64,14 @@ pub fn read_bundle(
                 meta_get(h, "description").and_then(scalar_str),
                 meta_get(h, "resource").and_then(scalar_str),
                 meta_get(h, "tags").map(yaml_to_json),
-                meta_get(h, "timestamp").and_then(scalar_str),
+                // OKF v0.2: fall back to `generated: {by, at}` when the
+                // legacy `timestamp` is absent (spec section 13).
+                meta_get(h, "timestamp").and_then(scalar_str).or_else(|| {
+                    meta_get(h, "generated").and_then(|g| match g {
+                        yaml_rust2::Yaml::Hash(gh) => meta_get(gh, "at").and_then(scalar_str),
+                        _ => None,
+                    })
+                }),
                 {
                     let mut m = serde_json::Map::new();
                     for (k, v) in h.iter() {

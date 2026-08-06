@@ -21,7 +21,7 @@ A unified, open-source **ingestion tool for [Open Knowledge Format](https://gith
 > project dogfoods OKF: that folder is a conformant bundle you can `ingest`,
 > `html`/`graph`, and `doctor` with the tool itself.
 
-OKF (Google Cloud, v0.1) is a directory of markdown files with YAML frontmatter — one concept per file, markdown links as a graph. Validators and parsers already exist (Node, a web tool, a pure-Rust crate). **What no other tool does — and what this one is for — is load a bundle into a SQL-queryable DuckDB catalog with built-in semantic search (RAG), and do it from R or Python** (there was no R or Python OKF tooling at all). See [Related tools](#related-tools).
+OKF (Google Cloud; spec v0.2, v0.1 bundles fully supported) is a directory of markdown files with YAML frontmatter — one concept per file, markdown links as a graph. Validators and parsers already exist (Node, a web tool, a pure-Rust crate). **What no other tool does — and what this one is for — is load a bundle into a SQL-queryable DuckDB catalog with built-in semantic search (RAG), and do it from R or Python** (there was no R or Python OKF tooling at all). See [Related tools](#related-tools).
 
 ## Deterministic by design — no agents
 

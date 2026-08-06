@@ -115,5 +115,28 @@ d0 <- okf_diff(rdup$con, file.path(here, "bundles", "diff_a"))
 chk("diff.drift_identical", d0$identical, TRUE)
 DBI::dbDisconnect(rdup$con, shutdown = TRUE)
 
+# v0.2 (generated/sources/verified families; generated.at timestamp fallback)
+rv  <- okf_ingest(file.path(here, "bundles", "v02"))
+exv <- jsonlite::fromJSON(file.path(here, "expected", "v02.json"))
+verv <- DBI::dbGetQuery(rv$con, "SELECT okf_version FROM okf_bundle")$okf_version
+chk("v02.okf_version",  verv,                    exv$bundle$okf_version)
+chk("v02.n_concepts",   rv$summary$n_concepts,   exv$bundle$n_concepts)
+chk("v02.n_conformant", rv$summary$n_conformant, exv$bundle$n_conformant)
+chk("v02.conformant",   rv$summary$conformant,   exv$bundle$conformant)
+chk("v02.errors",       rv$summary$errors,       exv$validation$errors)
+chk("v02.warnings",     rv$summary$warnings,     exv$validation$warnings)
+chk("v02.links_total",  rv$summary$links_total,  exv$links$total)
+chk("v02.links_broken", rv$summary$links_broken, exv$links$broken)
+rules_v <- DBI::dbGetQuery(rv$con, "SELECT DISTINCT rule FROM okf_validation")$rule
+for (fr in exv$validation$forbidden_rules)
+  chk(paste0("v02.no_", fr), fr %in% rules_v, FALSE)
+tsv <- DBI::dbGetQuery(rv$con, "SELECT path, timestamp FROM okf_concept")
+for (pth in names(exv$timestamps)) {
+  if (startsWith(pth, "_")) next
+  chk(paste0("v02.timestamp[", pth, "]"), tsv$timestamp[tsv$path == pth],
+      exv$timestamps[[pth]])
+}
+DBI::dbDisconnect(rv$con, shutdown = TRUE)
+
 if (length(fails)) { cat("FAIL\n  ", paste(fails, collapse = "\n  "), "\n"); quit(status = 1) }
 cat("PASS — R binding conformant on all fixtures\n")

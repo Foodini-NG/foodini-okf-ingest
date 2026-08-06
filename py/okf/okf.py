@@ -92,6 +92,15 @@ def _s(x):
     return str(x)
 
 
+def _ts(meta: dict):
+    """Concept freshness: `timestamp`, falling back to OKF v0.2
+    `generated: {by, at}` (spec section 13 fallback)."""
+    if meta.get("timestamp") is not None:
+        return meta["timestamp"]
+    g = meta.get("generated")
+    return g.get("at") if isinstance(g, dict) else None
+
+
 def parse_file(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as fh:
         # splitlines() (not split("\n")) matches R's readLines(): it strips the
@@ -225,7 +234,7 @@ def read_bundle(root: str, bundle_id: Optional[str] = None, source_kind: str = "
             path=rel, reserved=os.path.basename(f) in RESERVED,
             type=_s(meta.get("type")), title=_s(meta.get("title")),
             description=_s(meta.get("description")), resource=_s(meta.get("resource")),
-            tags=meta.get("tags"), timestamp=_s(meta.get("timestamp")),
+            tags=meta.get("tags"), timestamp=_s(_ts(meta)),
             body=p["body"], frontmatter=p["meta"], parse_error=p["err"],
             links_raw=extract_links(p["body"]),
             wikilinks_raw=extract_wikilinks(p["body"]),

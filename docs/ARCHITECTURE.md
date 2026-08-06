@@ -115,6 +115,14 @@ R; the `okf-ingest[html]` extra in Python). Link resolution reuses
 - **`n_concepts`** counts non-reserved concept documents; `index.md`/`log.md`
   are catalogued (`reserved = true`) but not counted as concepts (OKF: "all
   other `.md` files are concept documents").
+- **`timestamp` semantics (OKF v0.2)**: the concept `timestamp` field — and
+  the catalog column of the same name — resolves as *frontmatter `timestamp`,
+  falling back to `generated.at`* (the v0.2 §13 fallback). Implemented at the
+  single Concept-construction point in every binding so validation, html, and
+  diff inherit it; parity-locked by the `v02` conformance fixture. The MATLAB
+  YAML subset was extended for v0.2's nested shapes (flow maps, one-level
+  block maps, block sequences of maps); deeper nesting still raises the
+  spec-sanctioned `yaml_parse_error`.
 - **MATLAB specifics**: no YAML library exists that keeps timestamps verbatim
   (yamlmatlab coerces dates — exactly the forbidden behavior), so the binding
   ships a ~150-line YAML-subset parser (`okf.yaml_parse`): flat `key: value`,

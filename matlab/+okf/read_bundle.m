@@ -46,6 +46,14 @@ for i = 1:numel(files)
     c.resource = meta_scalar(p.meta, 'resource');
     c.tags = meta_get(p.meta, 'tags');       % char, cellstr, or []
     c.timestamp = meta_scalar(p.meta, 'timestamp');
+    % OKF v0.2: fall back to generated: {by, at} when the legacy
+    % timestamp is absent (spec section 13).
+    if isempty(c.timestamp)
+        g = meta_get(p.meta, 'generated');
+        if isa(g, 'containers.Map') && isKey(g, 'at') && ischar(g('at'))
+            c.timestamp = g('at');
+        end
+    end
     c.body = p.body;
     c.frontmatter = p.meta;                  % Map or []
     c.parse_error = p.err;                   % '' when clean

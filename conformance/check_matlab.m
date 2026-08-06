@@ -109,6 +109,65 @@ for i = 1:numel(res_tok)
     chk(sprintf('wikilinks.%s', key), got, want);
 end
 
+% --- v0.2 (generated/sources/verified; generated.at timestamp fallback) ---
+ingv = okf.ingest(fullfile(here, 'bundles', 'v02'));
+rawv = fileread(fullfile(here, 'expected', 'v02.json'));
+expv = jsondecode(rawv);
+chk('v02.okf_version', ingv.bundle.okf_version, expv.bundle.okf_version);
+chk('v02.n_concepts', ingv.summary.n_concepts, expv.bundle.n_concepts);
+chk('v02.conformant', ingv.summary.conformant, expv.bundle.conformant);
+chk('v02.errors', ingv.summary.errors, expv.validation.errors);
+chk('v02.warnings', ingv.summary.warnings, expv.validation.warnings);
+chk('v02.links_total', ingv.summary.links_total, expv.links.total);
+chk('v02.links_broken', ingv.summary.links_broken, expv.links.broken);
+for i = 1:numel(expv.validation.forbidden_rules)
+    fr = expv.validation.forbidden_rules{i};
+    present = false;
+    for j = 1:numel(ingv.findings)
+        if strcmp(ingv.findings(j).rule, fr)
+            present = true;
+        end
+    end
+    chk(sprintf('v02.no_%s', fr), present, false);
+end
+% timestamps from raw JSON (keys contain '.'; jsondecode mangles them)
+ts_tok = regexp(rawv, '"([a-z]+\.md)":\s*"([0-9TZ:.-]+)"', 'tokens');
+for i = 1:numel(ts_tok)
+    pth = ts_tok{i}{1};
+    want = ts_tok{i}{2};
+    got = '';
+    for j = 1:numel(ingv.bundle.concepts)
+        if strcmp(ingv.bundle.concepts(j).path, pth)
+            got = ingv.bundle.concepts(j).timestamp;
+        end
+    end
+    chk(sprintf('v02.timestamp[%s]', pth), got, want);
+end
+% lock the parser extension itself: nested shapes survive into frontmatter
+wfm = [];
+for j = 1:numel(ingv.bundle.concepts)
+    if strcmp(ingv.bundle.concepts(j).path, 'widget.md')
+        wfm = ingv.bundle.concepts(j).frontmatter;
+    end
+end
+if ~isa(wfm, 'containers.Map')
+    fails{end + 1} = 'v02.shape: widget.md frontmatter did not parse (nested YAML unsupported?)';
+else
+    gen = wfm('generated');
+    chk('v02.shape.generated_is_map', isa(gen, 'containers.Map'), true);
+    chk('v02.shape.generated_at', gen('at'), '2026-08-01T00:00:00Z');
+    src = wfm('sources');
+    chk('v02.shape.sources_is_cell', iscell(src) && numel(src) == 2, true);
+    s1 = src{1};
+    chk('v02.shape.source1_id', s1('id'), 'widget-schema');
+    chk('v02.shape.source1_usage_count_verbatim', s1('usage_count'), '5000');
+    vrf = wfm('verified');
+    v1 = vrf{1};
+    chk('v02.shape.verified_by', v1('by'), 'human:reviewer');
+    uw = wfm('usage_window');
+    chk('v02.shape.usage_window_from', uw('from'), '2026-06-01');
+end
+
 % --- rank (Personalized PageRank: exact, deterministic, parity-locked) ---
 ingr = okf.ingest(fullfile(here, 'bundles', 'store'));
 expr = jsondecode(fileread(fullfile(here, 'expected', 'rank.json')));

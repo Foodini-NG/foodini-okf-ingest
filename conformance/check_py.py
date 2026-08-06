@@ -66,6 +66,28 @@ for key, want in expw["resolutions"].items():
     check(f"wikilinks.{key}", wl.get((src, raw)), want)
 conw.close()
 
+# --- v0.2 (generated/sources/verified families; generated.at timestamp fallback) ---
+conv, sv = okf.ingest(os.path.join(HERE, "bundles", "v02"))
+expv = json.load(open(os.path.join(HERE, "expected", "v02.json")))
+ver_v = conv.execute("SELECT okf_version FROM okf_bundle").fetchone()[0]
+check("v02.okf_version", ver_v, expv["bundle"]["okf_version"])
+check("v02.n_concepts", sv["n_concepts"], expv["bundle"]["n_concepts"])
+check("v02.n_conformant", sv["n_conformant"], expv["bundle"]["n_conformant"])
+check("v02.conformant", sv["conformant"], expv["bundle"]["conformant"])
+check("v02.errors", sv["errors"], expv["validation"]["errors"])
+check("v02.warnings", sv["warnings"], expv["validation"]["warnings"])
+check("v02.links_total", sv["links_total"], expv["links"]["total"])
+check("v02.links_broken", sv["links_broken"], expv["links"]["broken"])
+rules_v = {r[0] for r in conv.execute("SELECT DISTINCT rule FROM okf_validation").fetchall()}
+for fr in expv["validation"]["forbidden_rules"]:
+    check(f"v02.no_{fr}", fr in rules_v, False)
+ts_v = dict(conv.execute("SELECT path, timestamp FROM okf_concept").fetchall())
+for pth, want in expv["timestamps"].items():
+    if pth.startswith("_"):
+        continue
+    check(f"v02.timestamp[{pth}]", ts_v.get(pth), want)
+conv.close()
+
 # --- rank (Personalized PageRank: exact, deterministic, parity-locked) ---
 from okf.graph import ppr as okf_ppr  # noqa: E402
 conr, _ = okf.ingest(os.path.join(HERE, "bundles", "store"))

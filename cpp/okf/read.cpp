@@ -75,6 +75,11 @@ Bundle read_bundle(const std::string& root, const std::string& source_kind) {
         c.resource = scalar(p.meta, "resource");
         c.tags = p.meta.is_object() && p.meta.contains("tags") ? p.meta["tags"] : json(nullptr);
         c.timestamp = scalar(p.meta, "timestamp");
+        // OKF v0.2: fall back to `generated: {by, at}` when the legacy
+        // `timestamp` is absent (spec section 13).
+        if (!c.timestamp && p.meta.is_object() && p.meta.contains("generated")) {
+            c.timestamp = scalar(p.meta["generated"], "at");
+        }
         c.frontmatter = p.meta;
         c.parse_error = p.parse_error;
         c.links_raw = extract_links(p.body);

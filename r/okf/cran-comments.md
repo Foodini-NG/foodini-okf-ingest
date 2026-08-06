@@ -1,6 +1,6 @@
-## Update: 0.7.0 -> 0.10.0
+## Update: 0.7.0 -> 0.11.0
 
-Second update; consolidates three additive releases (see NEWS.md):
+Second update; consolidates four additive releases (see NEWS.md):
 
 * 0.8.0 — `okf_rank()`: Personalized PageRank relevance over the concept
   graph, computed by exact power iteration (deterministic); `okf_context()`
@@ -12,6 +12,10 @@ Second update; consolidates three additive releases (see NEWS.md):
 * 0.10.0 — no R code changes: version kept in lockstep with the repository's
   new Rust, C++, and MATLAB bindings (all held byte-identical to the R
   binding by the shared conformance corpus).
+* 0.11.0 — OKF spec v0.2 support: the concept `timestamp` falls back to the
+  new `generated: {by, at}` frontmatter when the legacy field is absent;
+  new v0.2 field families parse and are preserved. Backward compatible;
+  v0.1 bundles unchanged.
 
 No API changes or removals; all additive and offline (no new dependencies).
 
