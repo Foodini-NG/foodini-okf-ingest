@@ -9,13 +9,13 @@ tags: [doctor, maintenance, health, ci]
 # Doctor
 
 Knowledge bases drift — links break when files move, timestamps go stale,
-concepts orphan. `okf doctor` is a deterministic one-shot health scan over [the
+concepts orphan. `okf-ingest doctor` is a deterministic one-shot health scan over [the
 catalog](catalog.md): it folds in the validation findings plus maintenance
 checks (duplicate titles; future/stale timestamps with `--stale-days`) and
 reports a health **score** = the percent of concepts with zero findings, with
 CI-friendly exit codes (`--strict` fails on warnings too).
 
-`okf doctor --fix` applies only *unambiguously-safe* repairs to source files —
+`okf-ingest doctor --fix` applies only *unambiguously-safe* repairs to source files —
 normalize a parseable non-ISO `timestamp`, and re-point a broken link when
 exactly one basename matches — and reports every change. Anything ambiguous is
 reported, never guessed (consistent with [determinism](determinism.md); no LLM).

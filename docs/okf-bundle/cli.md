@@ -1,14 +1,14 @@
 ---
 type: Reference
 title: CLI
-description: The okf command surface — identical verbs in R and Python.
-timestamp: 2026-06-23T00:00:00Z
+description: The okf-ingest command surface.
+timestamp: 2026-08-22T00:00:00Z
 tags: [cli]
 ---
 
 # CLI
 
-Identical subcommands in both languages (`okf …` after a pip/R-universe install):
+The subcommands, via `okf-ingest …` after [install](install.md):
 
 - `validate` — conformance lint (CI-friendly exit codes)
 - `ingest` — load a bundle into [the catalog](catalog.md); `--incremental` (see [incremental](incremental.md))

@@ -10,7 +10,7 @@ tags: [query, sql, duckdb]
 
 Because the bundle lives in a [DuckDB catalog](catalog.md), you query it with
 plain SQL — or the bare `duckdb` CLI, or from R/Python via the
-[bindings](bindings.md). `okf query` wraps the common reads: `--sql`,
+[bindings](bindings.md). `okf-ingest query` wraps the common reads: `--sql`,
 `--search <term>` (substring over bodies), `--concepts`, `--links`, `--findings`,
 with `--json` output.
 

@@ -1,3 +1,7 @@
+# Modified by Foodini 2026-08-22: removed the R / Rust / C++ sections along with
+# their bindings, and the src/*.o|so|dll rules that targeted R's src/ directory
+# (this fork uses src/ for the Python package). See NOTICE.
+
 # Python
 __pycache__/
 *.py[cod]
@@ -7,21 +11,8 @@ dist/
 .venv/
 venv/
 
-# R
-.Rproj.user/
-.Rhistory
-.RData
-.Ruserdata
-*.Rproj
-src/*.o
-src/*.so
-src/*.dll
-
-# Rust
-rust/okf-ingest/target/
-
-# C++
-cpp/build*/
+# uv
+.uv/
 
 # Catalogs / scratch
 *.duckdb
@@ -30,7 +21,7 @@ cpp/build*/
 /_state/
 
 # Rendered HTML output (the package ships the renderer, never rendered content).
-# `okf html` emits .html — never commit it. The repo has no .html source of its own.
+# `okf-ingest html` emits .html — never commit it. The repo has no .html source.
 *.html
 site/
 *_html/
@@ -43,6 +34,3 @@ _render/
 # OS
 .DS_Store
 Thumbs.db
-
-# R CMD check output
-okf.Rcheck/

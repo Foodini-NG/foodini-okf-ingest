@@ -8,7 +8,7 @@ tags: [rank, pagerank, retrieval, graph]
 
 # Rank
 
-`okf rank` scores every concept's relevance to a start concept with
+`okf-ingest rank` scores every concept's relevance to a start concept with
 **Personalized PageRank** over the [concept graph](links.md) — the author's
 own link structure, no embeddings, no model. Where PPR is usually approximated
 with Monte-Carlo walks, here it is computed by *exact power iteration*, so it

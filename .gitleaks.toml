@@ -1,0 +1,23 @@
+# Added by Foodini 2026-08-22. Per foodini-quality-manager
+# knowledge/standards/secret-scanning.md.
+[extend]
+useDefault = true
+
+# gitleaks' default rules cover provider tokens well but not plain database
+# connection URIs, which is the shape that has actually leaked at Foodini.
+[[rules]]
+id = "db-connection-uri-with-password"
+description = "Database connection URI with an inline password"
+regex = '''(?i)\b(postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis|amqp|clickhouse)://[^\s:/@]+:[^\s:/@]{3,}@[^\s/]+'''
+tags = ["database", "credential"]
+
+[rules.allowlist]
+regexTarget = "match"
+regexes = [
+  # Documentation and test placeholders, by shape rather than by path, so the
+  # allowlist keeps working if the file moves.
+  '''://[^\s:/@]+:(?:\*{3,}|x{3,}|X{3,}|\.{3,}|<[^>]+>|\$\{[^}]+\}|%[A-Za-z_]+%)@''',
+  '''://(?:user|username|USER|admin|root|postgres):(?:pass|password|passwd|secret|changeme|hunter2|example|placeholder|redacted)@''',
+  '''://localhost''',
+  '''@(?:localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b''',
+]

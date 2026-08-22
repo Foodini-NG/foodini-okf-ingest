@@ -8,7 +8,7 @@ tags: [validate, conformance, lint]
 
 # Validate
 
-`okf validate` checks a bundle against [the OKF spec](okf-spec.md): the hard rule
+`okf-ingest validate` checks a bundle against [the OKF spec](okf-spec.md): the hard rule
 (parseable frontmatter with a non-empty `type`) produces **errors**; everything
 else — missing recommended fields, broken links, orphans, non-ISO timestamps —
 produces **warnings**, never a rejection.

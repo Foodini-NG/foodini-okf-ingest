@@ -8,14 +8,14 @@ tags: [diff, drift, changelog, ci]
 
 # Diff
 
-`git diff` shows text hunks; `okf diff` shows what changed as *knowledge
+`git diff` shows text hunks; `okf-ingest diff` shows what changed as *knowledge
 structure*: concepts added / removed / changed (by `content_hash`), frontmatter
 `type`/`title` changes, and [graph](links.md) deltas — edges added/removed,
 links newly broken or fixed.
 
 Each side can be a bundle directory or an ingested [catalog](catalog.md), so
-one verb covers both shapes: `okf diff catalog.duckdb ./bundle` answers "what
-drifted since the last ingest", and `okf diff old/ new/` is a changelog between
+one verb covers both shapes: `okf-ingest diff catalog.duckdb ./bundle` answers "what
+drifted since the last ingest", and `okf-ingest diff old/ new/` is a changelog between
 two snapshots.
 
 Like [doctor](doctor.md) it is pure [deterministic](determinism.md) code — hash

@@ -8,7 +8,7 @@ tags: [context, llm, graph]
 
 # Context
 
-`okf context` is the faithful OKF / "LLM wiki" consume operation: hand an agent
+`okf-ingest context` is the faithful OKF / "LLM wiki" consume operation: hand an agent
 `index.md` plus a concept and its link-neighborhood, assembled into one markdown
 blob to read directly. It walks the [concept graph](links.md) you already built
 to a depth, capped to a token budget — **no embeddings, no vector search**.

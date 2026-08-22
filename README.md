@@ -1,13 +1,38 @@
-# okf-ingest
+# foodini-okf-ingest
 
-[![CI](https://github.com/travisjakel/okf-ingest/actions/workflows/ci.yml/badge.svg)](https://github.com/travisjakel/okf-ingest/actions/workflows/ci.yml)
-[![r-universe](https://travisjakel.r-universe.dev/okf/badges/version)](https://travisjakel.r-universe.dev/okf)
+[![CI](https://github.com/Foodini-NG/foodini-okf-ingest/actions/workflows/ci.yml/badge.svg)](https://github.com/Foodini-NG/foodini-okf-ingest/actions/workflows/ci.yml)
 [![conformance](https://img.shields.io/badge/OKF%20conformance-passing-brightgreen)](#conformance-tests)
 [![deterministic](https://img.shields.io/badge/deterministic-no%20LLM%20agents-blue)](#deterministic-by-design--no-agents)
-[![maintenance](https://img.shields.io/badge/status-stable%20%C2%B7%20lightly%20maintained-green)](#status)
+[![python](https://img.shields.io/badge/python-3.14%2B-blue)](#install)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-A unified, open-source **ingestion tool for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog) (OKF) bundles** — read any OKF bundle, validate its conformance (permissively, per the spec), build the concept graph, and load it into a portable, queryable **DuckDB catalog**. One catalog format, two idiomatic bindings: **R** and **Python**.
+> ### This is a fork
+>
+> **This file was modified by Foodini on 2026-08-22.** This repository is a
+> Foodini fork of [**okf-ingest**](https://github.com/travisjakel/okf-ingest) by
+> **Travis Jakel**, taken at commit `f3b58994` (release 0.11.0) and licensed
+> under Apache-2.0. See [`NOTICE`](NOTICE) for attribution and the full list of
+> changes.
+>
+> **What differs from the original.** The original ships five bindings — R,
+> Python, Rust, C++ and MATLAB — held byte-identical by a shared conformance
+> corpus. This fork keeps **Python only**, because Foodini does not write the
+> other four and holding them in lockstep would cost several implementations
+> per change. The catalog schema and the conformance corpus are retained
+> unchanged. The distribution is `foodini-okf-ingest` and the command is
+> `okf-ingest` (the original's bare `okf` collides with okf-generator).
+>
+> **This fork is independent.** Travis Jakel has not endorsed it and is not
+> responsible for it, so report problems *with this fork* here rather than to him.
+>
+> **If you want the tool rather than our build of it, go
+> [upstream](https://github.com/travisjakel/okf-ingest).** Five bindings instead
+> of one, actively developed, properly packaged — for most people it is simply the
+> better choice, and a fix contributed there helps far more users than the same
+> fix here. We forked to avoid maintaining four bindings we do not write, not
+> because we thought we could do it better.
+
+A unified, open-source **ingestion tool for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog) (OKF) bundles** — read any OKF bundle, validate its conformance (permissively, per the spec), build the concept graph, and load it into a portable, queryable **DuckDB catalog**. One catalog format, one idiomatic **Python** package.
 
 > **Point it at your `[[wikilink]]` vault.** As of 0.6, okf-ingest resolves both
 > markdown `](path)` links *and* `[[wikilink]]` references (Obsidian / Logseq /
@@ -15,13 +40,13 @@ A unified, open-source **ingestion tool for [Open Knowledge Format](https://gith
 > Your existing notes become a deterministic, queryable, renderable knowledge
 > graph with no rewriting. See [`[[wikilinks]]` & aliases](#wikilinks--aliases).
 
-![okf graph of okf-ingest's own documentation bundle](docs/graph.png)
+![okf-ingest graph of okf-ingest's own documentation bundle](docs/graph.png)
 
-> The image is `okf graph` run on [okf-ingest's own docs](docs/okf-bundle/) — the
+> The image is `okf-ingest graph` run on [okf-ingest's own docs](docs/okf-bundle/) — the
 > project dogfoods OKF: that folder is a conformant bundle you can `ingest`,
 > `html`/`graph`, and `doctor` with the tool itself.
 
-OKF (Google Cloud; spec v0.2, v0.1 bundles fully supported) is a directory of markdown files with YAML frontmatter — one concept per file, markdown links as a graph. Validators and parsers already exist (Node, a web tool, a pure-Rust crate). **What no other tool does — and what this one is for — is load a bundle into a SQL-queryable DuckDB catalog with built-in semantic search (RAG), and do it from R or Python** (there was no R or Python OKF tooling at all). See [Related tools](#related-tools).
+OKF (Google Cloud; spec v0.2, v0.1 bundles fully supported) is a directory of markdown files with YAML frontmatter — one concept per file, markdown links as a graph. Validators and parsers already exist (Node, a web tool, a pure-Rust crate). **What no other tool does — and what this one is for — is load a bundle into a SQL-queryable DuckDB catalog with built-in semantic search (RAG) from Python**. See [Related tools](#related-tools).
 
 ## Deterministic by design — no agents
 
@@ -47,7 +72,7 @@ substrate underneath:
   impact, and HTML/graph rendering are all plain code.
 - **Private** — your content never leaves the machine. Nothing is sent anywhere.
 - **Composable with agents, not replaced by them** — when you *do* want an LLM,
-  okf hands it the curated graph to reason over (`okf context`) rather than
+  okf hands it the curated graph to reason over (`okf-ingest context`) rather than
   pretending to be the reasoner. You bring the model; okf brings the ground truth.
 
 **The two honest exceptions**, both opt-in and explicit: the `embed`/`rag` layer
@@ -107,43 +132,26 @@ Reach for okf-ingest when direct reading isn't enough:
 For small curated bundles, **skip `embed`/`rag`** — the explicit graph the author
 wrote beats fuzzy vector matches, and following links costs nothing. If you want
 tooling *for* that wiki pattern (rather than against it), use
-[`okf context`](#context--the-index-first-no-embeddings-primitive): it assembles
+[`okf-ingest context`](#context--the-index-first-no-embeddings-primitive): it assembles
 the index-first, link-following slice for an agent to read directly — no
 embeddings involved.
 
 ## Quickstart
 
-One tool, two bindings — use whichever you live in.
-
-**R** — from [R-universe](https://travisjakel.r-universe.dev):
-
-```r
-install.packages("okf", repos = c(travisjakel = "https://travisjakel.r-universe.dev",
-                                  CRAN = "https://cloud.r-project.org"))
-library(okf)
-
-res <- okf_ingest("my-bundle", db_path = "kb.duckdb")   # dir, git URL, or tar/zip
-okf_embed(res$con)                                       # local Ollama nomic-embed-text
-okf_rag(res$con, "how is revenue computed?", k = 3)[, c("path", "title", "score")]
-#>                 path   title score
-#> 1 metrics/revenue.md Revenue 0.709
-#> 2          orders.md  Orders 0.642
-```
-
-**Python / CLI** — from [PyPI](https://pypi.org/project/okf-ingest/):
+Install from a clone (see [Install](#install)), then:
 
 ```bash
-pip install okf-ingest        # or: uv pip install okf-ingest  ·  uv add okf-ingest
+uv pip install -e ".[html]"    # from a clone; see Install
 
-okf ingest ./my-bundle --db kb.duckdb      # dir, git URL, or tar/zip
-okf embed  kb.duckdb
-okf rag    kb.duckdb --query "how is revenue computed?" -k 5
+okf-ingest ingest ./my-bundle --db kb.duckdb      # dir, git URL, or tar/zip
+okf-ingest embed  kb.duckdb
+okf-ingest rag    kb.duckdb --query "how is revenue computed?" -k 5
 # [0.71] metrics/revenue.md#1 — Revenue
 # [0.64] orders.md#1 — Orders
 ```
 
-The catalog is plain DuckDB — query it with SQL, R, Python, or the bare `duckdb`
-CLI. Ingest/embed in one language, query from the other.
+The catalog is plain DuckDB — query it from Python, or with the bare `duckdb`
+CLI, or anything else that speaks DuckDB.
 
 ## Use it from an AI agent
 
@@ -152,27 +160,27 @@ let it reason. Drop this into your agent's instructions
 (`AGENTS.md` / `CLAUDE.md` / Cursor rules) so it drives okf instead of grepping:
 
 ```
-The docs at <PATH> are an OKF bundle. Use `okf` to navigate them:
-- `okf context <PATH> --start <concept>.md --depth 1` → index.md + that concept +
+The docs at <PATH> are an OKF bundle. Use `okf-ingest` to navigate them:
+- `okf-ingest context <PATH> --start <concept>.md --depth 1` → index.md + that concept +
   its linked neighbours as one markdown blob. Read that; don't grep files ad hoc.
-- `okf query <PATH> --search "<term>"` (substring) or `--sql "<SELECT…>"` for lookups.
+- `okf-ingest query <PATH> --search "<term>"` (substring) or `--sql "<SELECT…>"` for lookups.
 Start from index.md to see the map.
 ```
 
 That's it — one paste and the agent reads the bundle index-first, the way OKF is
-meant to be consumed (`okf` runs locally; no data leaves the machine). For
-semantic instead of substring lookup, ingest once (`okf ingest <PATH> --db kb.duckdb`),
-`okf embed kb.duckdb`, then point the agent at `okf rag kb.duckdb --query "…"`. See
+meant to be consumed (`okf-ingest` runs locally; no data leaves the machine). For
+semantic instead of substring lookup, ingest once (`okf-ingest ingest <PATH> --db kb.duckdb`),
+`okf-ingest embed kb.duckdb`, then point the agent at `okf-ingest rag kb.duckdb --query "…"`. See
 [`context`](#context--the-index-first-no-embeddings-primitive).
 
-## Why "core + bindings" without a binary core
+## The core is a contract, not compiled code
 
-The interoperability **core is a contract, not compiled code**:
+Two language-neutral artifacts define behaviour, and this fork keeps both unchanged:
 
-1. **`schema/catalog.sql`** — the DuckDB catalog schema. Both bindings write matching catalogs (same rows, types, links, validation, and `content_hash` — a parity-locked conformance test enforces this); the `frontmatter` JSON column is semantically equal but not byte-for-byte identical across languages. You can query the catalog with the bare `duckdb` CLI, no library at all.
-2. **`conformance/`** — language-agnostic golden bundles + expected outputs that every binding must reproduce.
+1. **`schema/catalog.sql`** — the DuckDB catalog schema. You can query the catalog with the bare `duckdb` CLI, no library at all, and a catalog written here is readable by any conformant implementation of OKF ingestion — including the original's other bindings.
+2. **`conformance/`** — language-agnostic golden bundles plus expected outputs that the implementation must reproduce, including a `content_hash` parity lock and a hidden-directory guard.
 
-The **bindings** (`r/okf`, `py/okf`, `rust/okf-ingest`, `cpp/`, `matlab/`) are thin, native packages kept in lockstep by that shared corpus. This matches OKF's own ethos ("no required tooling — if you can `cat` a file you can read OKF") far better than a heavyweight FFI core would. R and Python carry the full surface (catalog, CLI, html, doctor, RAG); the Rust, C++, and MATLAB bindings implement the fixture-locked core (parse / validate / links / ingest summary / rank / seeds / diff / fetch) with no catalog dependency.
+In the original these existed to hold five independent implementations byte-identical. Here there is one implementation, so they serve as a **behavioural regression gate** instead — and an unusually strict one, precisely because every asserted value had to be reproducible in five languages. Any change that moves a conformance-asserted value must update the expected JSON deliberately and say why.
 
 ## What it enforces (and tolerates)
 
@@ -180,40 +188,30 @@ Per OKF §6, a bundle is **conformant** iff every non-reserved `.md` has parseab
 
 ## Install
 
+Python **3.14+**. The project is uv-managed and is not published to any index —
+install from a clone.
+
 ```bash
-# Python — installs the `okf` command + importable package
-pip install ./py            # (or: pip install okf-ingest once published)
-
-# R — from R-universe (binaries; pulls deps automatically)
-options(repos = c(travisjakel = "https://travisjakel.r-universe.dev",
-                  CRAN = "https://cloud.r-project.org"))
-install.packages("okf")
-# …or from a clone:
-R CMD INSTALL r/okf         # (or: remotes::install_local("r/okf"))
-
-# Rust — the fixture-locked core as a crate
-cargo add okf-ingest        # (or from a clone: path = "rust/okf-ingest")
+git clone git@github.com:Foodini-NG/foodini-okf-ingest.git
+cd foodini-okf-ingest
+uv venv --python 3.14
+uv pip install -e ".[html]"
 ```
 
-Optional extras: `pip install okf-ingest[html]` (or R `install.packages("commonmark")`)
-adds the markdown engine for `okf html`; embeddings/`rag` use a local Ollama
-server (no extra Python dep; R uses the `httr2` Suggests).
+That puts the **`okf-ingest`** command on PATH inside `.venv`, plus the
+importable `okf` package. The `[html]` extra adds the markdown engine for
+`okf-ingest html`; embeddings and `rag` use a local Ollama server by default and
+need no extra Python dependency (the embedder is pluggable — see
+[Semantic search](#semantic-search-rag)).
 
-Both bindings can also be used without installing (dev mode): `source("r/okf/R/okf.R")`
-in R, or `PYTHONPATH=py python -m okf …` for the Python CLI.
+Without installing: `PYTHONPATH=src python -m okf …`.
+
+> The command is **`okf-ingest`**, not `okf`. Both OKF tools claimed the bare
+> `okf`, so on a machine with okf-generator installed `okf --help` could run the
+> other tool. Renaming it is one of this fork's changes.
 
 ## Usage
 
-**R**
-```r
-source("r/okf/R/okf.R")
-res <- okf_ingest("path/to/bundle", db_path = "catalog.duckdb")
-res$summary                       # n_concepts, conformant, errors, links_broken, ...
-okf_search(res$con, "revenue")    # full-text-ish lookup over bodies
-okf_findings(res$con)             # conformance findings
-```
-
-**Python**
 ```python
 import okf.okf as okf
 con, summary = okf.ingest("path/to/bundle", db_path="catalog.duckdb")
@@ -278,23 +276,22 @@ you don't.
 
 ## CLI
 
-Identical subcommands in both languages — after install just `okf …` (Python
-console script); in R via `Rscript r/okf/bin/okf.R …` (uses the installed
-package, or falls back to dev source):
+After install, `okf-ingest …` (the console script). Without installing,
+`PYTHONPATH=src python -m okf …` takes the same arguments.
 
 ```bash
-okf validate <bundle> [--strict] [--json]      # lint; exit 1 on errors (or warnings w/ --strict)
-okf ingest   <source> --db catalog.duckdb [--subdir <p>] [--branch <b>] [--incremental] [--json]
-okf query    catalog.duckdb [--sql "…"] [--search <term>] [--concepts|--links|--findings] [--json]
-okf context  <bundle|catalog> [--start <concept>] [--depth N] [--max-tokens N]  # LLM-wiki context blob
-okf html     <bundle|catalog> --out <dir> | --single <file.html> [--title T]    # render for viewing
-okf graph    <bundle|catalog> --out <file.html> [--title T]                     # interactive force-directed graph
-okf export   <bundle|catalog> [--json]                      # portable {nodes, edges} graph JSON
-okf impact   <bundle|catalog> <concept> [--json]            # inbound / outbound / transitive ripple
-okf rank     <bundle|catalog> <concept> [-k N]              # Personalized PageRank relevance to a concept
-okf diff     <a> <b> [--json]                               # concept-level changelog; each side a bundle dir or catalog
-okf embed    catalog.duckdb [--model nomic-embed-text] [--incremental]  # chunk + embed bodies for search
-okf rag      catalog.duckdb --query "…" [-k 5] [--model …]  # top-k semantic matches
+okf-ingest validate <bundle> [--strict] [--json]      # lint; exit 1 on errors (or warnings w/ --strict)
+okf-ingest ingest   <source> --db catalog.duckdb [--subdir <p>] [--branch <b>] [--incremental] [--json]
+okf-ingest query    catalog.duckdb [--sql "…"] [--search <term>] [--concepts|--links|--findings] [--json]
+okf-ingest context  <bundle|catalog> [--start <concept>] [--depth N] [--max-tokens N]  # LLM-wiki context blob
+okf-ingest html     <bundle|catalog> --out <dir> | --single <file.html> [--title T]    # render for viewing
+okf-ingest graph    <bundle|catalog> --out <file.html> [--title T]                     # interactive force-directed graph
+okf-ingest export   <bundle|catalog> [--json]                      # portable {nodes, edges} graph JSON
+okf-ingest impact   <bundle|catalog> <concept> [--json]            # inbound / outbound / transitive ripple
+okf-ingest rank     <bundle|catalog> <concept> [-k N]              # Personalized PageRank relevance to a concept
+okf-ingest diff     <a> <b> [--json]                               # concept-level changelog; each side a bundle dir or catalog
+okf-ingest embed    catalog.duckdb [--model nomic-embed-text] [--incremental]  # chunk + embed bodies for search
+okf-ingest rag      catalog.duckdb --query "…" [-k 5] [--model …]  # top-k semantic matches
 ```
 
 ### `context` — the index-first, no-embeddings primitive
@@ -306,7 +303,7 @@ markdown blob to read directly. It walks the concept graph you already built —
 the on-concept alternative to `rag` for curated bundles:
 
 ```bash
-okf context ./my-bundle --start orders.md --depth 1 --max-tokens 8000 > ctx.md
+okf-ingest context ./my-bundle --start orders.md --depth 1 --max-tokens 8000 > ctx.md
 # emits index.md + orders.md + everything one link away, ready to paste into a prompt
 ```
 
@@ -319,8 +316,8 @@ with **no build step, no JavaScript, inline CSS** — copy the output anywhere a
 open it. Two modes:
 
 ```bash
-okf html ./my-bundle --out site/            # navigable site: one .html per concept + index.html
-okf html ./my-bundle --single bundle.html   # one self-contained file (concepts become anchored sections)
+okf-ingest html ./my-bundle --out site/            # navigable site: one .html per concept + index.html
+okf-ingest html ./my-bundle --single bundle.html   # one self-contained file (concepts become anchored sections)
 ```
 
 Internal `.md` links are rewritten to **page-relative** `.html` (site) or
@@ -338,9 +335,9 @@ The catalog already holds the link graph; these expose it (all **deterministic**
 no LLM):
 
 ```bash
-okf graph  ./my-bundle --out graph.html   # interactive force-directed page (vanilla JS, no CDN)
-okf export ./my-bundle > graph.json       # portable {nodes, edges} for any external visualizer
-okf impact ./my-bundle signals/x.md       # outbound / inbound / transitive ripple of a concept
+okf-ingest graph  ./my-bundle --out graph.html   # interactive force-directed page (vanilla JS, no CDN)
+okf-ingest export ./my-bundle > graph.json       # portable {nodes, edges} for any external visualizer
+okf-ingest impact ./my-bundle signals/x.md       # outbound / inbound / transitive ripple of a concept
 ```
 
 `graph` is a single self-contained HTML page — pan/zoom/drag, type-to-search,
@@ -364,14 +361,14 @@ wikis.
 ### `doctor` — ongoing health & maintenance
 
 Knowledge bases drift — links break when files move, timestamps go stale,
-concepts orphan. `okf doctor` is a deterministic one-shot health scan with a
+concepts orphan. `okf-ingest doctor` is a deterministic one-shot health scan with a
 score and CI exit codes:
 
 ```bash
-okf doctor ./my-bundle                  # health: 92/100 (broken links, orphans, stale ts, dup titles…)
-okf doctor ./my-bundle --strict         # exit 1 on any warning — drop into CI / a hook
-okf doctor ./my-bundle --stale-days 365 # also flag timestamps older than a year
-okf doctor ./my-bundle --fix            # apply ONLY safe repairs, report each
+okf-ingest doctor ./my-bundle                  # health: 92/100 (broken links, orphans, stale ts, dup titles…)
+okf-ingest doctor ./my-bundle --strict         # exit 1 on any warning — drop into CI / a hook
+okf-ingest doctor ./my-bundle --stale-days 365 # also flag timestamps older than a year
+okf-ingest doctor ./my-bundle --fix            # apply ONLY safe repairs, report each
 ```
 
 `doctor` also flags `duplicate_identity` (one id/alias claimed by two
@@ -389,15 +386,15 @@ workflow so a bundle can't drift broken.
 
 ### `rank` — relevance, from the graph the author wrote
 
-`okf rank` scores every concept's relevance to a start concept with
+`okf-ingest rank` scores every concept's relevance to a start concept with
 **Personalized PageRank** — computed by *exact power iteration*, not
 Monte-Carlo sampling, so it is fully deterministic like everything else here.
 No embeddings, no model: the signal is the link structure the bundle's author
 already encoded.
 
 ```bash
-okf rank ./my-bundle orders.md            # what matters most to orders.md, ranked
-okf context ./my-bundle --start orders.md --rank ppr   # budget-fill context by relevance
+okf-ingest rank ./my-bundle orders.md            # what matters most to orders.md, ranked
+okf-ingest context ./my-bundle --start orders.md --rank ppr   # budget-fill context by relevance
 ```
 
 `context --rank ppr` upgrades neighborhood selection from BFS ("everything at
@@ -421,20 +418,20 @@ query token) → multi-seed PPR weighted by those scores → relevance-filled
 context:
 
 ```bash
-okf context ./my-bundle --query "how is revenue computed?" --max-tokens 4000
+okf-ingest context ./my-bundle --query "how is revenue computed?" --max-tokens 4000
 ```
 
 ### `diff` — what changed, as knowledge structure
 
-`git diff` shows text hunks; `okf diff` shows what changed as **knowledge
+`git diff` shows text hunks; `okf-ingest diff` shows what changed as **knowledge
 structure**: concepts added / removed / changed (by `content_hash`),
 frontmatter `type`/`title` changes, and graph deltas — edges added/removed,
 links newly broken or fixed. Each side can be a bundle directory *or* an
 ingested `.duckdb` catalog, which gives you both shapes for free:
 
 ```bash
-okf diff catalog.duckdb ./my-bundle     # DRIFT: what changed since the last ingest
-okf diff ./snapshot-old ./snapshot-new  # SNAPSHOT: changelog between two versions
+okf-ingest diff catalog.duckdb ./my-bundle     # DRIFT: what changed since the last ingest
+okf-ingest diff ./snapshot-old ./snapshot-new  # SNAPSHOT: changelog between two versions
 ```
 
 ```
@@ -449,7 +446,7 @@ links: +2 added / -1 removed, newly broken 1, fixed 1
 
 Like everything in the core it's deterministic — pure hash/set comparison,
 output sorted by path, no model, no wall clock — and exits `0` when identical,
-`1` when different, so `okf diff` drops straight into CI as a change gate the
+`1` when different, so `okf-ingest diff` drops straight into CI as a change gate the
 same way `doctor` gates health. (Programmatic: `okf_diff(a, b)` in R,
 `okf.diff(a, b)` in Python; both also accept an open connection or an
 `okf_read()` bundle.)
@@ -471,64 +468,59 @@ are fetched to a temp dir and cleaned up automatically; `--subdir` selects a
 bundle within a repo/archive and `--branch` picks a git ref:
 
 ```bash
-okf ingest https://github.com/org/repo.git --subdir docs/okf --db kb.duckdb
-okf ingest https://example.com/bundle.tar.gz --db kb.duckdb
+okf-ingest ingest https://github.com/org/repo.git --subdir docs/okf --db kb.duckdb
+okf-ingest ingest https://example.com/bundle.tar.gz --db kb.duckdb
 ```
 
-`validate` is CI-friendly (non-zero exit = non-conformant). The catalog is
-**portable across bindings** — ingest with R, query with Python, or vice-versa:
+`validate` is CI-friendly (non-zero exit = non-conformant). The catalog is a
+plain DuckDB file and the schema is the interop contract, so anything that
+speaks DuckDB can read it — including the bare CLI:
 
 ```bash
-Rscript r/okf/bin/okf.R ingest ./bundle --db cat.duckdb   # R writes
-okf query cat.duckdb --search revenue                     # Python reads
+okf-ingest ingest ./bundle --db cat.duckdb
+duckdb cat.duckdb -c "SELECT path, title FROM okf_concept ORDER BY path"
 ```
 
 ## Conformance tests
 
 ```bash
-Rscript conformance/check_r.R       # R binding vs expected/*.json
-python  conformance/check_py.py     # Python binding vs expected/*.json
-bash    conformance/check_rust.sh   # Rust binding (cargo test --test conformance)
-bash    conformance/check_cpp.sh    # C++ binding (cmake + ctest -R conformance)
-bash    conformance/check_matlab.sh # MATLAB binding (matlab -batch, or Octave)
+python conformance/check_py.py      # vs conformance/expected/*.json — must print PASS
 ```
+
+Stdlib-only and standalone. It gates every change; CI runs it on every push and
+pull request.
 
 ## Layout
 
 ```
-schema/catalog.sql      core: the catalog schema (interop contract)
-conformance/            core: golden bundles + expected outputs + per-lang checks
-docs/                   ARCHITECTURE.md, SPEC_NOTES.md
-r/okf/                  R binding (full surface)
-py/okf/                 Python binding (full surface)
-rust/okf-ingest/        Rust binding (fixture-locked core, catalog-free)
-cpp/                    C++ binding (fixture-locked core, catalog-free; CMake)
-matlab/+okf/            MATLAB binding (fixture-locked core, catalog-free;
-                        MATLAB/Octave-compatible, zero toolboxes)
+pyproject.toml          the package: foodini-okf-ingest, console script okf-ingest
+src/okf/                the implementation (okf.py, cli.py, graph.py, html.py,
+                        doctor.py, diff.py, rag.py)
+schema/catalog.sql      the catalog schema (interop contract) — unchanged from upstream
+conformance/            golden bundles + expected outputs + check_py.py (the gate)
+docs/                   ARCHITECTURE.md, SPEC_NOTES.md, okf-bundle/ (dogfood)
+bench/                  retrieval benchmark + published results
+examples/               a GitHub Action and a pre-commit hook
+NOTICE                  attribution and the list of changes from upstream
 ```
 
 ## Status
 
-**Stable · lightly maintained.** The whole consume side is implemented,
-CLI-wrapped, and conformance-tested in both languages over one portable DuckDB
-catalog: **validate → ingest → query → context → render (`html` / `graph` /
-`export` `--mermaid`) → `impact` → `rank` → `doctor` → `diff` → embed → rag**, with
-`--incremental` ingest/embed and dir/git/tar/zip sources. Packaged to
-[PyPI](https://pypi.org/project/okf-ingest/) and
-[R-universe](https://travisjakel.r-universe.dev/okf). Three further bindings
-implement the conformance core (parse / validate / links / ingest summary /
-rank / seeds / diff / fetch) byte-identical on the shared fixtures, with no
-html/doctor/RAG/CLI: `rust/okf-ingest` (pure-Rust crate, on
-[crates.io](https://crates.io/crates/okf-ingest)), `cpp/` (C++17 static
-library, CMake + FetchContent, rapidyaml + nlohmann/json), and `matlab/+okf`
-(pure-M package, no toolboxes, MATLAB/Octave-compatible — add `matlab/` to
-your path and call `okf.ingest`).
+**Stable feature surface · maintained by Foodini for Foodini's use.** The whole
+consume side is implemented, CLI-wrapped and conformance-tested over one
+portable DuckDB catalog: **validate → ingest → query → context → render
+(`html` / `graph` / `export --mermaid`) → `impact` → `rank` → `doctor` → `diff`
+→ embed → rag**, with `--incremental` ingest/embed and dir/git/tar/zip sources.
 
-The feature surface is complete and the conformance contract is locked, so the
-package is **stable** — safe to depend on. It is **lightly maintained**: expect
-fixes for bugs, conformance regressions, and OKF-spec updates, but not a fast
-cadence of new features. Issues and PRs are welcome (see
-[CONTRIBUTING.md](CONTRIBUTING.md)); response times are best-effort.
+The feature surface came from upstream complete and the conformance contract is
+locked, so behaviour is stable. What this fork does *not* offer is a general
+support commitment: it exists to serve Foodini's knowledge pipeline, it is not
+published to any package index, and it will diverge from upstream over time.
+Issues and PRs are welcome here. But if your change is generally useful rather
+than specific to how Foodini runs this, **please take it to
+[the original](https://github.com/travisjakel/okf-ingest) instead** — it has five
+bindings to our one, it is actively developed, and a fix landed there helps far
+more people. See [CONTRIBUTING.md](CONTRIBUTING.md) for where the line falls.
 
 ## Roadmap
 
@@ -551,10 +543,10 @@ plain deterministic code. See [Deterministic by design](#deterministic-by-design
 DuckDB catalogs (a parity test enforces it); ingest in one, query from the other.
 
 **Do I need embeddings/RAG?** Usually not for small curated bundles — the graph
-the author wrote beats fuzzy matches, and `okf context` costs nothing. See
+the author wrote beats fuzzy matches, and `okf-ingest context` costs nothing. See
 [Do you actually need RAG?](#do-you-actually-need-rag).
 
-**How do I keep a bundle healthy over time?** `okf doctor` (+ the
+**How do I keep a bundle healthy over time?** `okf-ingest doctor` (+ the
 [`examples/`](examples/) pre-commit hook / GitHub Action) gates drift in CI;
 `--fix` repairs the unambiguously-safe issues.
 
@@ -586,10 +578,13 @@ R and Python:
 okf-ingest sits on the **consume** side of the OKF lifecycle. For the **produce**
 side — authoring, maintaining, and visualizing bundles (especially inside Claude
 Code) — [`okf-knowledge`](https://github.com/sniperunder123/okf-knowledge) is a
-nice complement: curate a bundle there, then `okf ingest` it into a queryable
+nice complement: curate a bundle there, then `okf-ingest ingest` it into a queryable
 DuckDB + RAG catalog here. If you only need to lint a bundle, the Rust/Node
 validators are great.
 
 ## License
 
-Apache-2.0 (matching the OKF reference implementation). See `LICENSE`.
+Apache-2.0, unchanged from the original work. See [`LICENSE`](LICENSE) for the
+licence text and [`NOTICE`](NOTICE) for attribution to Travis Jakel, the fork
+point, and the list of modifications. Files modified by Foodini carry a notice
+saying so, per Apache-2.0 section 4(b).
