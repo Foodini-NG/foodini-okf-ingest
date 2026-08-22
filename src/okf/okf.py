@@ -1,9 +1,13 @@
 """okf — Open Knowledge Format ingestion (Python binding).
 
-Mirrors the R reference binding (r/okf/R/okf.R) and writes a byte-compatible
-DuckDB catalog against the same schema (schema/catalog.sql), so a bundle
-ingested by either language yields the same catalog. Implements OKF v0.1
-permissive consumption: never rejects a bundle for recommended-field issues.
+Modified by Foodini 2026-08-22: --subdir is honoured for local directory
+sources, via a single bundle-root resolution path shared by every source kind.
+Derived from okf-ingest by Travis Jakel (Apache-2.0) — see NOTICE.
+
+Writes a catalog against schema/catalog.sql, the interop contract, so a bundle
+ingested here yields a catalog any conformant implementation can read — including
+the original work's other bindings. Implements OKF v0.1 permissive consumption:
+never rejects a bundle for recommended-field issues.
 
 Public API:
     read_bundle(root)            -> Bundle (concepts + raw links)
@@ -321,9 +325,25 @@ def _assert_safe_members(base: str, names) -> None:
             raise RuntimeError(f"archive member escapes target dir (path traversal): {n!r}")
 
 
+class SubdirNotFound(ValueError):
+    """--subdir named a path that is not in the source. Subclasses ValueError
+    so callers that already catch ValueError keep working."""
+
+
 def _bundle_root(base: str, subdir: Optional[str]) -> str:
+    """Resolve the directory a bundle actually lives in.
+
+    ONE resolution path for every source kind. It used to be reachable only for
+    git and archive sources, so `--subdir` was accepted and silently ignored for
+    local directories and the whole bundle was scanned instead.
+    """
     if subdir:
-        return os.path.join(base, subdir)
+        root = os.path.join(base, subdir)
+        if not os.path.isdir(root):
+            raise SubdirNotFound(
+                f"--subdir does not exist in the source: {subdir!r} "
+                f"(looked for {root!r})")
+        return root
     cur = base
     for _ in range(6):
         entries = [e for e in os.listdir(cur) if not e.startswith(".")]
@@ -340,7 +360,7 @@ def fetch(source: str, subdir: Optional[str] = None, branch: Optional[str] = Non
     """Materialize a bundle from a dir, git URL, or tar/zip (local or remote).
     Returns (dir, source_kind, cleanup); the caller must call cleanup()."""
     if os.path.isdir(source):
-        return os.path.realpath(source), "dir", (lambda: None)
+        return _bundle_root(os.path.realpath(source), subdir), "dir", (lambda: None)
     kind = _source_kind(source)
     tmp = tempfile.mkdtemp(prefix="okf_")
 
@@ -392,7 +412,10 @@ def ingest(root, db_path: str = ":memory:", ingested_at: Optional[str] = None,
             d, kind, cleanup = fetch(root, subdir=subdir, branch=branch)
             b = read_bundle(d, bundle_id, kind)
         else:
-            b = read_bundle(root, bundle_id, source_kind)
+            # A local directory used to skip fetch() entirely and land here with
+            # `subdir` unused, which is the second way the flag went missing.
+            b = read_bundle(_bundle_root(os.path.realpath(root), subdir),
+                            bundle_id, source_kind)
         return _ingest_bundle(b, db_path, ingested_at, incremental)
     finally:
         if cleanup:

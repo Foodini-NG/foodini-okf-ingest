@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""okf — command-line interface (Python). Mirrors r/okf/bin/okf.R.
+"""okf — command-line interface (Python).
 
-  okf validate <bundle> [--strict] [--json]
+Modified by Foodini 2026-08-22: `validate` gains --subdir, so every subcommand
+that takes a source now accepts it. Derived from okf-ingest by Travis Jakel
+(Apache-2.0) — see NOTICE.
+
+  okf validate <bundle> [--subdir <p>] [--strict] [--json]
   okf ingest   <bundle> --db <path> [--id <id>] [--json]
   okf query    <db> [--sql "..."] [--search <term>] [--concepts] [--links] [--findings] [--json]
   okf context  <bundle|db> [--start <path>] [--depth N] [--max-tokens N] [--no-index] [--rank ppr] [--query "..."]
@@ -37,10 +41,19 @@ def _print(rows, cols, as_json):
 
 
 def main(argv=None):
+    try:
+        return _main(argv)
+    except okf.SubdirNotFound as e:
+        print(e, file=sys.stderr)          # usage error, per the exit codes above
+        return 2
+
+
+def _main(argv=None):
     p = argparse.ArgumentParser(prog="okf", add_help=True)
     sub = p.add_subparsers(dest="cmd")
 
     v = sub.add_parser("validate"); v.add_argument("bundle")
+    v.add_argument("--subdir", default=None)
     v.add_argument("--strict", action="store_true"); v.add_argument("--json", action="store_true")
 
     i = sub.add_parser("ingest"); i.add_argument("bundle")
@@ -102,7 +115,9 @@ def main(argv=None):
         p.print_help(); return 2
 
     if a.cmd == "validate":
-        b = okf.read_bundle(a.bundle)
+        # validate reads a local bundle directly rather than going through
+        # fetch(), so it needs the same root resolution applied explicitly.
+        b = okf.read_bundle(okf._bundle_root(os.path.realpath(a.bundle), a.subdir))
         val = okf.validate(b)
         nerr = sum(1 for f in val if f["severity"] == "error")
         nwarn = sum(1 for f in val if f["severity"] == "warn")

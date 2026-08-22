@@ -55,6 +55,36 @@ for er in expn["validation"]["error_rules"]:
     check(f"negative.{er['path']}", rules.get(er["path"]), er["rule"])
 con2.close()
 
+# --- subdirs (--subdir must scope a LOCAL directory source, not be ignored) ---
+# Added by Foodini 2026-08-22. The flag was accepted and silently ignored for
+# local directories, so the whole bundle was scanned instead. No existing fixture
+# had more than one subtree, so nothing could catch it.
+exps = json.load(open(os.path.join(HERE, "expected", "subdirs.json")))
+_sub_root = os.path.join(HERE, "bundles", "subdirs")
+for _key, _sd in (("whole", None), ("alpha", "alpha"), ("beta", "beta")):
+    _c, _s = okf.ingest(_sub_root, subdir=_sd)
+    _e = exps[_key]
+    check(f"subdirs.{_key}.n_concepts", _s["n_concepts"], _e["n_concepts"])
+    check(f"subdirs.{_key}.conformant", _s["conformant"], _e["conformant"])
+    check(f"subdirs.{_key}.links_total", _s["links_total"], _e["links_total"])
+    check(f"subdirs.{_key}.links_broken", _s["links_broken"], _e["links_broken"])
+    check(f"subdirs.{_key}.warnings", _s["warnings"], _e["warnings"])
+    if _key == "alpha":
+        # An out-of-subtree link is tolerated and marked unresolved, per the OKF
+        # rule that consumers MUST tolerate broken links.
+        _brk = _c.execute(
+            "SELECT dst_raw FROM okf_link WHERE NOT resolved").fetchall()
+        check("subdirs.alpha.broken_dst_raw",
+              [r[0] for r in _brk], [_e["broken_dst_raw"]])
+    _c.close()
+
+# a --subdir that does not exist must fail loudly, naming what it looked for
+try:
+    okf.ingest(_sub_root, subdir=exps["bad_subdir"])
+    check("subdirs.bad_subdir_raises", "no exception", "ValueError")
+except ValueError as _ex:
+    check("subdirs.bad_subdir_names_it", exps["bad_subdir"] in str(_ex), True)
+
 # --- wikilinks ([[name]] resolved by id/alias/title/stem; markdown unchanged) ---
 conw, sw = okf.ingest(os.path.join(HERE, "bundles", "wikilinks"))
 expw = json.load(open(os.path.join(HERE, "expected", "wikilinks.json")))
