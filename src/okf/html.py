@@ -1,11 +1,16 @@
-"""okf HTML rendering (Python) — mirrors the R binding's okf_html().
+"""okf HTML rendering (Python).
 
 A thin "render for viewing" layer: turn an ingested OKF catalog into either a
 navigable static site (one self-contained .html per concept, links rewritten so
 you click through the graph) or a single self-contained .html (concepts become
 anchored sections). No JavaScript, inline CSS — copy the output anywhere and
-open it. Body markdown is rendered with the `markdown` package (the optional
-`okf-ingest[html]` extra). Keep CSS + link rules in sync with r/okf/R/okf_html.R.
+open it. Body markdown is rendered with the `markdown` package, the optional
+`[html]` extra of this distribution.
+
+Modified by Foodini 2026-08-23: corrected the optional-dependency hint, which
+named upstream's distribution, and dropped the pointer to the R binding this
+fork does not carry. Derived from okf-ingest by Travis Jakel (Apache-2.0) —
+see NOTICE.
 """
 from __future__ import annotations
 import json, os, re
@@ -94,7 +99,9 @@ def _rewrite_hrefs(html: str, page: str, known: set, single: bool) -> str:
 
 
 def _render_body(body: str) -> str:
-    import markdown  # optional dep: pip install okf-ingest[html]
+    # Optional dep. Install the [html] extra of THIS package; "okf-ingest[html]"
+    # is upstream's distribution and would fetch a different tool.
+    import markdown  # noqa: PLC0415  - optional dep, imported lazily on purpose
     return markdown.markdown(body or "", extensions=["tables", "fenced_code", "sane_lists"])
 
 

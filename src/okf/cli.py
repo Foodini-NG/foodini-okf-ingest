@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """okf — command-line interface (Python).
 
-Modified by Foodini 2026-08-22/23: `validate` gains --subdir, so every
+Modified by Foodini 2026-08-22/23: prog is `okf-ingest`, matching the console
+script; `validate` gains --subdir, so every
 subcommand that takes a source now accepts it; and gains --summary plus
 severity/rule/path filters, so "is the hand-written layer clean?" is a
 first-class question rather than a shell pipeline. Derived from okf-ingest by
@@ -58,7 +59,11 @@ def main(argv=None):
 
 
 def _main(argv=None):
-    p = argparse.ArgumentParser(prog="okf", add_help=True)
+    # prog must match the installed console script. It said "okf", so every
+    # usage line and error told the reader to run a command that in this fork
+    # belongs to okf-generator - reintroducing the very collision the rename
+    # was meant to close.
+    p = argparse.ArgumentParser(prog="okf-ingest", add_help=True)
     sub = p.add_subparsers(dest="cmd")
 
     v = sub.add_parser("validate"); v.add_argument("bundle")
