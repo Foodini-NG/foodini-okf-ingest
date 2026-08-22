@@ -140,6 +140,70 @@ check("filters.cli_conformant_unfiltered", _out["conformant"], False)
 check("filters.cli_errors_unfiltered", _out["errors"], 2)
 check("filters.cli_reports_suppression", _out["filtered"]["suppressed"], 4)
 
+# --- two bundles, one catalog: reads must be scoped ---
+# Added by Foodini 2026-08-23. Every fixture above ingests a single bundle, so
+# nothing in the corpus could catch an unscoped read - and 28 of 31 reads were
+# unscoped. Both bundles here contain `shared.md`, so an unscoped read returns
+# rows from both and looks plausible while being wrong.
+from okf.graph import backlinks as okf_backlinks  # noqa: E402
+from okf.graph import graph_json as okf_graph_json  # noqa: E402
+from okf.graph import impact as okf_impact  # noqa: E402
+from okf.doctor import doctor as okf_doctor  # noqa: E402
+
+expt = json.load(open(os.path.join(HERE, "expected", "twobundles.json")))
+_tdb = os.path.join(tempfile.mkdtemp(), "two.duckdb")
+for _d in ("a", "b"):
+    _c, _ = okf.ingest(os.path.join(HERE, "bundles", "twobundles", _d), db_path=_tdb)
+    _c.close()
+import duckdb as _ddb  # noqa: E402
+_tc = _ddb.connect(_tdb, read_only=True)
+check("two.bundles", _tc.execute("SELECT count(*) FROM okf_bundle").fetchone()[0],
+      expt["bundles"])
+check("two.collision_rows",
+      _tc.execute("SELECT count(*) FROM okf_concept WHERE path = ?",
+                  [expt["collision"]["path"]]).fetchone()[0],
+      expt["collision"]["rows_in_catalog"])
+
+# ids are path-derived, so map them by root basename
+_ids = {os.path.basename(r[1]): r[0] for r in
+        _tc.execute("SELECT bundle_id, root FROM okf_bundle").fetchall()}
+check("two.roots_found", sorted(_ids), ["a", "b"])
+
+# no bundle_id + more than one bundle = refuse, and name the candidates
+try:
+    okf.resolve_bundle(_tc)
+    check("two.ambiguous_refused", "no exception", "ValueError")
+except ValueError as _ex:
+    check("two.ambiguous_names_both",
+          all(i in str(_ex) for i in _ids.values()), True)
+try:
+    okf.resolve_bundle(_tc, "not-a-bundle-id")
+    check("two.unknown_id_refused", "no exception", "ValueError")
+except ValueError:
+    pass
+
+_pb = expt["per_bundle"]
+for _name, _bid in sorted(_ids.items()):
+    check(f"two.{_name}.resolve", okf.resolve_bundle(_tc, _bid), _bid)
+    check(f"two.{_name}.root", okf.bundle_root(_tc, _bid), _name)
+    # search must not reach across: each bundle carries its own marker only
+    _mine = "alphamarker" if _name == "a" else "betamarker"
+    _theirs = "betamarker" if _name == "a" else "alphamarker"
+    check(f"two.{_name}.search_own", len(okf.search(_tc, _mine, bundle_id=_bid)), 2)
+    check(f"two.{_name}.search_other", len(okf.search(_tc, _theirs, bundle_id=_bid)), 0)
+    # the colliding path resolves within its own bundle only
+    _want_in = _pb["shared_inbound"][_name]
+    check(f"two.{_name}.shared_inbound",
+          okf_backlinks(_tc, "shared.md", bundle_id=_bid), _want_in)
+    check(f"two.{_name}.shared_impact_inbound",
+          okf_impact(_tc, "shared.md", bundle_id=_bid)["inbound"], _want_in)
+    check(f"two.{_name}.graph_nodes",
+          len(json.loads(okf_graph_json(_tc, bundle_id=_bid))["nodes"]), _pb["graph_nodes"])
+    _rep = okf_doctor(_tc, bundle_id=_bid)
+    check(f"two.{_name}.doctor_concepts", _rep["n_concepts"], _pb["n_concepts"])
+    check(f"two.{_name}.doctor_score", _rep["score"], _pb["doctor_score"])
+_tc.close()
+
 # --- wikilinks ([[name]] resolved by id/alias/title/stem; markdown unchanged) ---
 conw, sw = okf.ingest(os.path.join(HERE, "bundles", "wikilinks"))
 expw = json.load(open(os.path.join(HERE, "expected", "wikilinks.json")))

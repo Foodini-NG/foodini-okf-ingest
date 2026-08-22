@@ -8,13 +8,15 @@ open it. Body markdown is rendered with the `markdown` package, the optional
 `[html]` extra of this distribution.
 
 Modified by Foodini 2026-08-23: corrected the optional-dependency hint, which
-named upstream's distribution, and dropped the pointer to the R binding this
-fork does not carry. Derived from okf-ingest by Travis Jakel (Apache-2.0) —
+named upstream's distribution, dropped the pointer to the R binding this fork
+does not carry, and scoped every catalog read to one bundle. Derived from okf-ingest by Travis Jakel (Apache-2.0) —
 see NOTICE.
 """
 from __future__ import annotations
 import json, os, re
 from typing import Optional
+
+from .okf import bundle_root, resolve_bundle
 
 from . import okf as _okf
 
@@ -164,7 +166,8 @@ def _doc(title: str, body_inner: str) -> str:
     )
 
 
-def render_html(con, out: str, single: bool = False, site_title: Optional[str] = None) -> dict:
+def render_html(con, out: str, single: bool = False, site_title: Optional[str] = None,
+                bundle_id: Optional[str] = None) -> dict:
     """Render an ingested OKF catalog to HTML for viewing.
 
     Site mode (`single=False`, default): one self-contained `.html` per concept
@@ -174,25 +177,26 @@ def render_html(con, out: str, single: bool = False, site_title: Optional[str] =
     intra-bundle links jumping to anchors. No JS; CSS inlined. Returns a dict
     with `files`, `n_concepts`, `mode`.
     """
+    bid = resolve_bundle(con, bundle_id)
     cps = [dict(zip(["path", "reserved", "type", "title", "description", "tags",
                      "timestamp", "body", "frontmatter"], r))
            for r in con.execute(
                "SELECT path, reserved, type, title, description, tags, timestamp, body, "
-               "frontmatter FROM okf_concept ORDER BY path").fetchall()]
+               "frontmatter FROM okf_concept WHERE bundle_id = ? ORDER BY path",
+               [bid]).fetchall()]
     if not cps:
         raise ValueError("catalog has no concepts to render")
-    val = [{"path": p, "rule": rl} for p, rl in
-           con.execute("SELECT path, rule FROM okf_validation").fetchall()]
+    val = [{"path": p, "rule": rl} for p, rl in con.execute(
+        "SELECT path, rule FROM okf_validation WHERE bundle_id = ?", [bid]).fetchall()]
     known = {c["path"] for c in cps}
     blmap = {}
     for s, d in con.execute(
-            "SELECT DISTINCT src_path, dst_path FROM okf_link WHERE resolved ORDER BY src_path").fetchall():
+            "SELECT DISTINCT src_path, dst_path FROM okf_link "
+            "WHERE resolved AND bundle_id = ? ORDER BY src_path", [bid]).fetchall():
         blmap.setdefault(d, []).append(s)
     titlemap = {c["path"]: c["title"] for c in cps}
-    row = con.execute("SELECT root FROM okf_bundle LIMIT 1").fetchone()
-    root = row[0] if row else None
     if not site_title:
-        site_title = os.path.basename(root) if root else "OKF bundle"
+        site_title = bundle_root(con, bid) or "OKF bundle"
 
     def status_of(fm):
         try:

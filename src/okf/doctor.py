@@ -1,14 +1,20 @@
-"""okf doctor (Python) — mirrors r/okf/R/okf_doctor.R.
+"""okf doctor (Python).
 
 A DETERMINISTIC health/maintenance report for a bundle (reusing the validation
 findings in the catalog plus maintenance checks), with a health score and
 CI-friendly counts. `doctor_fix` applies ONLY unambiguously-safe repairs to the
 source files (normalize parseable non-ISO timestamps; re-point a broken link
 when exactly one basename matches) and reports every change. No LLM, no guessing.
+
+Modified by Foodini 2026-08-23: catalog reads are scoped to one bundle, and the
+pointer to the R binding this fork does not carry is dropped. Derived from
+okf-ingest by Travis Jakel (Apache-2.0) — see NOTICE.
 """
 from __future__ import annotations
 import datetime, os, re
 from typing import Optional
+
+from .okf import resolve_bundle
 
 from . import okf as _okf
 from .html import _relpath
@@ -16,7 +22,8 @@ from .html import _relpath
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
-def doctor(con, now: Optional[str] = None, stale_days: Optional[int] = None) -> dict:
+def doctor(con, now: Optional[str] = None, stale_days: Optional[int] = None,
+           bundle_id: Optional[str] = None) -> dict:
     """Health/maintenance report. Combines catalog validation findings with
     maintenance checks: duplicate titles; duplicate identity (same normalized
     id/alias claimed by >1 concept); hub concentration (info severity); and
@@ -24,12 +31,15 @@ def doctor(con, now: Optional[str] = None, stale_days: Optional[int] = None) -> 
     non-reserved concepts with zero error/warn findings (info never affects
     it). Returns: score, n_concepts, n_healthy, n_error, n_warn, n_info,
     by_rule, issues."""
+    bid = resolve_bundle(con, bundle_id)
     cps = con.execute(
-        "SELECT path, reserved, title, timestamp FROM okf_concept ORDER BY path").fetchall()
+        "SELECT path, reserved, title, timestamp FROM okf_concept "
+        "WHERE bundle_id = ? ORDER BY path", [bid]).fetchall()
     nonres = [r for r in cps if not r[1]]
     issues = [{"path": p, "severity": s, "rule": ru, "message": m}
               for p, s, ru, m in con.execute(
-                  "SELECT path, severity, rule, message FROM okf_validation").fetchall()]
+                  "SELECT path, severity, rule, message FROM okf_validation "
+                  "WHERE bundle_id = ?", [bid]).fetchall()]
 
     # duplicate titles among non-reserved concepts
     titles = {}
@@ -45,7 +55,8 @@ def doctor(con, now: Optional[str] = None, stale_days: Optional[int] = None) -> 
     # duplicate identity — same normalized id/alias claimed by >1 concept
     import json as _json
     fmres = con.execute(
-        "SELECT path, frontmatter FROM okf_concept WHERE reserved = FALSE ORDER BY path").fetchall()
+        "SELECT path, frontmatter FROM okf_concept "
+        "WHERE reserved = FALSE AND bundle_id = ? ORDER BY path", [bid]).fetchall()
     normk = lambda x: "".join(ch for ch in str(x).lower() if ch.isalnum())
     claims = {}
     for path, fm_raw in fmres:
@@ -69,7 +80,8 @@ def doctor(con, now: Optional[str] = None, stale_days: Optional[int] = None) -> 
 
     # hub concentration (info): outbound links mostly pointing at hub pages
     lk2 = con.execute(
-        "SELECT DISTINCT src_path, dst_path FROM okf_link WHERE resolved").fetchall()
+        "SELECT DISTINCT src_path, dst_path FROM okf_link "
+        "WHERE resolved AND bundle_id = ?", [bid]).fetchall()
     if lk2:
         indeg = {}
         for _, d in lk2:

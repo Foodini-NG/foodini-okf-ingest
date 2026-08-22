@@ -1,7 +1,7 @@
 """okf graph affordances (Python).
 
-Modified by Foodini 2026-08-22: ppr() no longer re-sorts its edge list on every
-power-iteration pass. Derived from okf-ingest by Travis Jakel (Apache-2.0) — see
+Modified by Foodini 2026-08-22/23: ppr() no longer re-sorts its edge list on
+every power-iteration pass, and every catalog read is scoped to one bundle. Derived from okf-ingest by Travis Jakel (Apache-2.0) — see
 NOTICE.
 
 All DETERMINISTIC; no LLM. The catalog already holds the concept graph
@@ -16,38 +16,49 @@ from __future__ import annotations
 import json, os, re
 from typing import Optional
 
+from .okf import bundle_root, resolve_bundle
+
 
 def _esc(s: str) -> str:
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def _adj(con):
+def _adj(con, bundle_id: Optional[str] = None):
     """Undirected adjacency over resolved links + the full concept rows."""
+    bid = resolve_bundle(con, bundle_id)
     cps = con.execute(
-        "SELECT path, reserved, type, title, tags FROM okf_concept ORDER BY path").fetchall()
+        "SELECT path, reserved, type, title, tags FROM okf_concept "
+        "WHERE bundle_id = ? ORDER BY path", [bid]).fetchall()
     adj = {r[0]: set() for r in cps}
-    for s, d in con.execute("SELECT src_path, dst_path FROM okf_link WHERE resolved").fetchall():
+    for s, d in con.execute(
+            "SELECT src_path, dst_path FROM okf_link WHERE resolved AND bundle_id = ?",
+            [bid]).fetchall():
         adj.setdefault(s, set()).add(d)
         adj.setdefault(d, set()).add(s)
     return cps, adj
 
 
-def backlinks(con, path: str) -> list:
+def backlinks(con, path: str, bundle_id: Optional[str] = None) -> list:
     """Concepts that link to `path` (resolved inbound links), sorted."""
     return [r[0] for r in con.execute(
-        "SELECT DISTINCT src_path FROM okf_link WHERE resolved AND dst_path = ? ORDER BY src_path",
-        [path]).fetchall()]
+        "SELECT DISTINCT src_path FROM okf_link "
+        "WHERE resolved AND bundle_id = ? AND dst_path = ? ORDER BY src_path",
+        [resolve_bundle(con, bundle_id), path]).fetchall()]
 
 
-def impact(con, path: str) -> dict:
+def impact(con, path: str, bundle_id: Optional[str] = None) -> dict:
     """Direct `outbound`, direct `inbound` (backlinks), and `transitive` — every
     concept that can reach `path` by following resolved links (the ripple)."""
+    bid = resolve_bundle(con, bundle_id)
     out = [r[0] for r in con.execute(
-        "SELECT DISTINCT dst_path FROM okf_link WHERE resolved AND src_path = ? ORDER BY dst_path",
-        [path]).fetchall()]
-    inb = backlinks(con, path)
+        "SELECT DISTINCT dst_path FROM okf_link "
+        "WHERE resolved AND bundle_id = ? AND src_path = ? ORDER BY dst_path",
+        [bid, path]).fetchall()]
+    inb = backlinks(con, path, bundle_id=bid)
     radj = {}
-    for s, d in con.execute("SELECT src_path, dst_path FROM okf_link WHERE resolved").fetchall():
+    for s, d in con.execute(
+            "SELECT src_path, dst_path FROM okf_link WHERE resolved AND bundle_id = ?",
+            [bid]).fetchall():
         radj.setdefault(d, []).append(s)
     seen, frontier = set(), [path]
     while frontier:
@@ -60,12 +71,13 @@ def impact(con, path: str) -> dict:
     return {"path": path, "outbound": out, "inbound": inb, "transitive": sorted(seen)}
 
 
-def clusters(con, max_iter: int = 50, include_reserved: bool = False) -> list:
+def clusters(con, max_iter: int = 50, include_reserved: bool = False,
+             bundle_id: Optional[str] = None) -> list:
     """Deterministic community labels via synchronous label propagation on the
     undirected resolved-link graph. Nodes adopt the most common neighbour label,
     ties broken by the smallest label (fully reproducible). Returns a list of
     {path, cluster} (1-based ids, stable order)."""
-    cps, adj = _adj(con)
+    cps, adj = _adj(con, bundle_id)
     nodes = [r[0] for r in cps] if include_reserved else [r[0] for r in cps if not r[1]]
     if not nodes:
         return []
@@ -96,12 +108,15 @@ def clusters(con, max_iter: int = 50, include_reserved: bool = False) -> list:
     return out
 
 
-def _graph_model(con, include_reserved: bool = True) -> dict:
+def _graph_model(con, include_reserved: bool = True,
+                 bundle_id: Optional[str] = None) -> dict:
     """Node/edge model shared by the JSON export and the graph page. Reserved
     concepts (index.md hub, log.md) are nodes by default — index.md anchors the
     layout."""
-    cps, _ = _adj(con)
-    clmap = {c["path"]: c["cluster"] for c in clusters(con, include_reserved=include_reserved)}
+    bid = resolve_bundle(con, bundle_id)
+    cps, _ = _adj(con, bid)
+    clmap = {c["path"]: c["cluster"]
+             for c in clusters(con, include_reserved=include_reserved, bundle_id=bid)}
     keep = set(r[0] for r in cps) if include_reserved else set(r[0] for r in cps if not r[1])
     nodes = []
     for path, reserved, typ, title, tags in cps:
@@ -117,23 +132,25 @@ def _graph_model(con, include_reserved: bool = True) -> dict:
             "cluster": clmap.get(path, 0),
             "href": re.sub(r"\.md$", ".html", path)})
     edges = []
-    for s, d in con.execute("SELECT src_path, dst_path FROM okf_link WHERE resolved").fetchall():
+    for s, d in con.execute(
+            "SELECT src_path, dst_path FROM okf_link WHERE resolved AND bundle_id = ?",
+            [bid]).fetchall():
         if s in keep and d in keep:
             edges.append({"source": s, "target": d})
     return {"nodes": nodes, "edges": edges}
 
 
-def graph_json(con, pretty: bool = True) -> str:
+def graph_json(con, pretty: bool = True, bundle_id: Optional[str] = None) -> str:
     """Portable `{nodes, edges}` JSON. Nodes carry id/type/title/tags/cluster/href;
     edges are resolved links {source, target}."""
-    return json.dumps(_graph_model(con), indent=2 if pretty else None)
+    return json.dumps(_graph_model(con, bundle_id=bundle_id), indent=2 if pretty else None)
 
 
-def graph_mermaid(con) -> str:
+def graph_mermaid(con, bundle_id: Optional[str] = None) -> str:
     """Render the concept graph as a Mermaid `graph LR` diagram (a ```mermaid
     block) for embedding in markdown — the lightweight complement to graph_html.
     Node ids are sanitized; labels are concept titles."""
-    m = _graph_model(con)
+    m = _graph_model(con, bundle_id=bundle_id)
     safe = lambda p: "n" + re.sub(r"[^A-Za-z0-9]", "_", p)
     lab = lambda s: s.replace('"', "'")
     lines = ["```mermaid", "graph LR"]
@@ -150,7 +167,7 @@ OKF_STOPWORDS = {"the", "and", "for", "are", "was", "were", "with", "that",
                  "about", "into", "over", "under", "why", "who", "whom"}
 
 
-def seeds(con, query: str, k: int = 5) -> list:
+def seeds(con, query: str, k: int = 5, bundle_id: Optional[str] = None) -> list:
     """Deterministic lexical seed selection for a free-text query: lowercase
     alphanumeric tokens (length >= 3, fixed stopword list) score every
     non-reserved concept +3 per distinct token in the title, +2 in the
@@ -163,7 +180,8 @@ def seeds(con, query: str, k: int = 5) -> list:
                    if len(t) >= 3 and t not in OKF_STOPWORDS})
     cps = con.execute(
         "SELECT path, title, description, tags, body FROM okf_concept "
-        "WHERE reserved = FALSE ORDER BY path").fetchall()
+        "WHERE reserved = FALSE AND bundle_id = ? ORDER BY path",
+        [resolve_bundle(con, bundle_id)]).fetchall()
     out = []
     for path, title, desc, tags, body in cps:
         ttl = (title or "").lower(); tgs = (tags or "").lower()
@@ -183,7 +201,8 @@ def seeds(con, query: str, k: int = 5) -> list:
 
 
 def ppr(con, start, damping: float = 0.85, tol: float = 1e-12,
-        max_iter: int = 200, k: int = 20, weights=None) -> list:
+        max_iter: int = 200, k: int = 20, weights=None,
+        bundle_id: Optional[str] = None) -> list:
     """Personalized PageRank scores for the concept graph, seeded at `start`.
 
     EXACT power iteration (no Monte-Carlo sampling) over the UNDIRECTED
@@ -194,10 +213,13 @@ def ppr(con, start, damping: float = 0.85, tol: float = 1e-12,
     as dicts of path/score/title/reserved, score descending, ties by path.
     Mirrors r/okf/R/okf_rank.R::okf_rank.
     """
+    bid = resolve_bundle(con, bundle_id)
     cps = con.execute(
-        "SELECT path, title, reserved FROM okf_concept ORDER BY path").fetchall()
+        "SELECT path, title, reserved FROM okf_concept WHERE bundle_id = ? ORDER BY path",
+        [bid]).fetchall()
     lks = con.execute(
-        "SELECT DISTINCT src_path, dst_path FROM okf_link WHERE resolved").fetchall()
+        "SELECT DISTINCT src_path, dst_path FROM okf_link "
+        "WHERE resolved AND bundle_id = ?", [bid]).fetchall()
     nodes = [r[0] for r in cps]
     starts = [start] if isinstance(start, str) else list(start)
     missing = [x for x in starts if x not in nodes]
@@ -252,15 +274,16 @@ def ppr(con, start, damping: float = 0.85, tol: float = 1e-12,
     return rows[:k] if k else rows
 
 
-def graph_html(con, out: str, site_title: Optional[str] = None) -> str:
+def graph_html(con, out: str, site_title: Optional[str] = None,
+               bundle_id: Optional[str] = None) -> str:
     """Render the concept graph as one self-contained interactive HTML page — a
     force-directed canvas (hand-rolled vanilla JS, no CDN): pan, zoom, drag,
     type-to-search, nodes coloured by OKF type (community fallback). Clicking a
     node navigates to its rendered `.html`. Returns the output path."""
-    m = _graph_model(con)
-    row = con.execute("SELECT root FROM okf_bundle LIMIT 1").fetchone()
+    bid = resolve_bundle(con, bundle_id)
+    m = _graph_model(con, bundle_id=bid)
     if not site_title:
-        site_title = os.path.basename(row[0]) if row and row[0] else "OKF graph"
+        site_title = bundle_root(con, bid) or "OKF graph"
     html = GRAPH_TEMPLATE.replace("__TITLE__", _esc(site_title)).replace(
         "__DATA__", json.dumps(m), 1)
     d = os.path.dirname(os.path.abspath(out))

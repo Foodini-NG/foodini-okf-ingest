@@ -285,6 +285,7 @@ okf-ingest validate <bundle> [--subdir <p>] [--strict] [--json]   # lint; exit 1
                      [--path G,..] [--exclude-path G,..]           # narrow the findings; globs or path prefixes
 okf-ingest ingest   <source> --db catalog.duckdb [--subdir <p>] [--branch <b>] [--incremental] [--json]
 okf-ingest query    catalog.duckdb [--sql "…"] [--search <term>] [--concepts|--links|--findings] [--json]
+                    [--bundle <id>]     # only needed if the catalog holds more than one bundle
 okf-ingest context  <bundle|catalog> [--start <concept>] [--depth N] [--max-tokens N]  # LLM-wiki context blob
 okf-ingest html     <bundle|catalog> --out <dir> | --single <file.html> [--title T]    # render for viewing
 okf-ingest graph    <bundle|catalog> --out <file.html> [--title T]                     # interactive force-directed graph

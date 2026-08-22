@@ -4,8 +4,9 @@ Modified by Foodini 2026-08-22/23: --subdir is honoured for local directory
 sources, via a single bundle-root resolution path shared by every source
 kind; catalog writes are batched into multi-row INSERT ... VALUES statements
 instead of one execute() per row; and findings can be filtered and
-summarised (filter_findings / summarize_findings). Derived from okf-ingest
-by Travis Jakel (Apache-2.0) — see NOTICE.
+summarised (filter_findings / summarize_findings); and catalog reads are
+scoped to one bundle (resolve_bundle). Derived from okf-ingest by Travis Jakel
+(Apache-2.0) — see NOTICE.
 
 Writes a catalog against schema/catalog.sql, the interop contract, so a bundle
 ingested here yields a catalog any conformant implementation can read — including
@@ -397,6 +398,12 @@ def _assert_safe_members(base: str, names) -> None:
             raise RuntimeError(f"archive member escapes target dir (path traversal): {n!r}")
 
 
+class BundleScopeError(ValueError):
+    """A read could not be pinned to one bundle: the id given is not in the
+    catalog, or none was given and the catalog holds more than one. Subclasses
+    ValueError so callers that already catch ValueError keep working."""
+
+
 class SubdirNotFound(ValueError):
     """--subdir named a path that is not in the source. Subclasses ValueError
     so callers that already catch ValueError keep working."""
@@ -591,10 +598,45 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
     return con, summary
 
 
-def search(con, term: str):
+def resolve_bundle(con, bundle_id: Optional[str] = None) -> str:
+    """Which bundle in the catalog a read applies to.
+
+    Explicit argument wins; otherwise the single bundle; otherwise refuse and name
+    the candidates. Refusing is the point: the schema is multi-bundle (every table
+    carries bundle_id, okf_concept is keyed by (bundle_id, path)) but paths collide
+    ACROSS bundles - `src/main.py` exists in many repos - so an unscoped read over
+    two bundles returns a plausible, confidently wrong answer. Better to ask.
+    """
+    ids = [r[0] for r in con.execute(
+        "SELECT bundle_id FROM okf_bundle ORDER BY bundle_id").fetchall()]
+    if bundle_id is not None:
+        if bundle_id not in ids:
+            raise BundleScopeError(f"bundle_id not in catalog: {bundle_id!r} "
+                                   f"(have: {', '.join(ids) or 'none'})")
+        return bundle_id
+    if len(ids) == 1:
+        return ids[0]
+    if not ids:
+        raise BundleScopeError("catalog holds no bundles - nothing to read (ingest first)")
+    raise BundleScopeError(
+        f"catalog holds {len(ids)} bundles; say which one to read "
+        f"(bundle_id=..., or --bundle on the CLI): {', '.join(ids)}")
+
+
+def bundle_root(con, bundle_id: Optional[str] = None) -> str:
+    """The ingested root path of one bundle, for titling output. Was
+    `SELECT root FROM okf_bundle LIMIT 1` in three places - an arbitrary pick as
+    soon as a second bundle exists, which then mislabels the render."""
+    row = con.execute("SELECT root FROM okf_bundle WHERE bundle_id = ?",
+                      [resolve_bundle(con, bundle_id)]).fetchone()
+    return os.path.basename(row[0]) if row and row[0] else "bundle"
+
+
+def search(con, term: str, bundle_id: Optional[str] = None):
     return con.execute(
-        "SELECT path, type, title FROM okf_concept WHERE body ILIKE ? ORDER BY path",
-        [f"%{term}%"]).fetchall()
+        "SELECT path, type, title FROM okf_concept "
+        "WHERE bundle_id = ? AND body ILIKE ? ORDER BY path",
+        [resolve_bundle(con, bundle_id), f"%{term}%"]).fetchall()
 
 
 def _bfs_select(cps, adj, nonres, start, depth):
@@ -612,17 +654,23 @@ def _bfs_select(cps, adj, nonres, start, depth):
     return [p for p in sel if p in nonres]
 
 
-def context(con, start=None, depth: int = 1, max_tokens: int = 8000, include_index: bool = True, rank: str = "bfs", query=None):
+def context(con, start=None, depth: int = 1, max_tokens: int = 8000,
+            include_index: bool = True, rank: str = "bfs", query=None,
+            bundle_id: Optional[str] = None):
     """Assemble an index-first, link-following slice of a bundle as one markdown
     blob for direct LLM consumption — the OKF / "LLM wiki" consume primitive.
     Uses the concept graph (no embeddings, no vector search). With `start`, walks
     the undirected link graph to `depth`; otherwise packs all concepts. Output is
     capped to ~`max_tokens` (~4 chars/token). Returns a dict with text/included/
     omitted/est_tokens."""
+    bid = resolve_bundle(con, bundle_id)
     cps = {p: {"reserved": r, "title": t, "body": b} for p, r, t, b in con.execute(
-        "SELECT path, reserved, title, body FROM okf_concept").fetchall()}
+        "SELECT path, reserved, title, body FROM okf_concept WHERE bundle_id = ?",
+        [bid]).fetchall()}
     adj = {}
-    for s, d in con.execute("SELECT src_path, dst_path FROM okf_link WHERE resolved").fetchall():
+    for s, d in con.execute(
+            "SELECT src_path, dst_path FROM okf_link WHERE resolved AND bundle_id = ?",
+            [bid]).fetchall():
         adj.setdefault(s, set()).add(d)
         adj.setdefault(d, set()).add(s)
     nonres = [p for p, v in cps.items() if not v["reserved"]]
@@ -632,26 +680,26 @@ def context(con, start=None, depth: int = 1, max_tokens: int = 8000, include_ind
         raise ValueError("give either start or query, not both")
     if query is not None:
         from .graph import ppr as _ppr, seeds as _seeds
-        seeds_used = _seeds(con, query)
+        seeds_used = _seeds(con, query, bundle_id=bid)
         if not seeds_used:
             raise ValueError(f"query matched no concepts: {query}")
         r = _ppr(con, [x["path"] for x in seeds_used],
-                 weights=[x["score"] for x in seeds_used], k=None)
+                 weights=[x["score"] for x in seeds_used], k=None, bundle_id=bid)
         sel = [x["path"] for x in r if x["path"] in nonres]
     elif start is not None:
         if start not in cps:
             raise ValueError(f"start concept not found: {start}")
         if rank == "ppr":
             from .graph import ppr as _ppr
-            sel = [r["path"] for r in _ppr(con, start, k=None) if r["path"] in nonres]
+            sel = [r["path"] for r in _ppr(con, start, k=None, bundle_id=bid)
+                   if r["path"] in nonres]
         else:
             sel = _bfs_select(cps, adj, nonres, start, depth)
     else:
         sel = sorted(nonres)
 
     est = lambda s: -(-len(s) // 4)
-    row = con.execute("SELECT root FROM okf_bundle LIMIT 1").fetchone()
-    root = os.path.basename(row[0]) if row and row[0] else "bundle"
+    root = bundle_root(con, bid)
     out = [f"# OKF context -- {root}\n"]
     used = est(out[0]); inc = []; omit = []
 

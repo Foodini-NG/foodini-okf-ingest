@@ -8,7 +8,7 @@ tags: [cli]
 
 # CLI
 
-The subcommands, via `okf-ingest …` after [install](install.md):
+The subcommands, via `okf-ingest …` after [install](install.md). Anything that reads a `.duckdb` [catalog](catalog.md) takes `--bundle <id>`, required only when the catalog holds more than one bundle:
 
 - `validate` — conformance lint (CI-friendly exit codes)
 - `ingest` — load a bundle into [the catalog](catalog.md); `--incremental` (see [incremental](incremental.md))
