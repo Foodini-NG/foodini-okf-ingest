@@ -1,0 +1,15 @@
+{
+  "bundle": {
+    "n_concepts": 0,
+    "n_conformant": 0,
+    "conformant": true
+  },
+  "links": {
+    "total": 0,
+    "broken": 0
+  },
+  "validation": {
+    "errors": 0,
+    "warnings": 0
+  }
+}

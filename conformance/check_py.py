@@ -85,6 +85,25 @@ try:
 except ValueError as _ex:
     check("subdirs.bad_subdir_names_it", exps["bad_subdir"] in str(_ex), True)
 
+# --- minimal (reserved docs only: zero concepts, zero links, zero findings) ---
+# Added by Foodini 2026-08-22. The degenerate case: batching the catalog writes
+# introduced a path that cannot accept an empty row set, and no existing fixture
+# produced one. This pins it.
+conm, sm = okf.ingest(os.path.join(HERE, "bundles", "minimal"))
+expm = json.load(open(os.path.join(HERE, "expected", "minimal.json")))
+check("minimal.n_concepts", sm["n_concepts"], expm["bundle"]["n_concepts"])
+check("minimal.n_conformant", sm["n_conformant"], expm["bundle"]["n_conformant"])
+check("minimal.conformant", sm["conformant"], expm["bundle"]["conformant"])
+check("minimal.links_total", sm["links_total"], expm["links"]["total"])
+check("minimal.links_broken", sm["links_broken"], expm["links"]["broken"])
+check("minimal.errors", sm["errors"], expm["validation"]["errors"])
+check("minimal.warnings", sm["warnings"], expm["validation"]["warnings"])
+check("minimal.link_rows",
+      conm.execute("SELECT count(*) FROM okf_link").fetchone()[0], 0)
+check("minimal.validation_rows",
+      conm.execute("SELECT count(*) FROM okf_validation").fetchone()[0], 0)
+conm.close()
+
 # --- wikilinks ([[name]] resolved by id/alias/title/stem; markdown unchanged) ---
 conw, sw = okf.ingest(os.path.join(HERE, "bundles", "wikilinks"))
 expw = json.load(open(os.path.join(HERE, "expected", "wikilinks.json")))
