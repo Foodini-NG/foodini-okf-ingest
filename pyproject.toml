@@ -1,0 +1,51 @@
+# Modified by Foodini 2026-08-22: renamed the distribution and console script to
+# avoid colliding with upstream and with okf-generator, moved to a src/ layout,
+# raised the Python floor to 3.14, and added uv-managed resolution. Derived from
+# okf-ingest 0.11.0 by Travis Jakel (Apache-2.0) — see NOTICE.
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# Renamed from upstream's "okf-ingest": that distribution name belongs to the
+# original author, and the bare "okf" console script collides with okf-generator.
+name = "foodini-okf-ingest"
+# Upstream base version + a PEP 440 local segment identifying this fork, so the
+# provenance is visible in `pip show`. Local versions cannot be uploaded to PyPI;
+# publishing is a separate decision and would need this changed.
+version = "0.11.0+foodini.1"
+description = "Foodini fork of okf-ingest — deterministic, agent-free ingestion for Open Knowledge Format (OKF) bundles: validate, load into a portable DuckDB catalog, render, graph and semantically search. Python-only."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "Apache-2.0"
+authors = [{ name = "Travis Jakel", email = "travis.s.jakel@gmail.com" }]
+maintainers = [{ name = "Foodini", email = "kent@getfoodini.com" }]
+keywords = ["okf", "open-knowledge-format", "knowledge", "rag", "duckdb", "agents"]
+# Loose bounds are correct for a library. Exact versions are pinned in uv.lock.
+# Note for QM: this package WRITES the catalog that foodini-docs-query READS, so
+# a duckdb major bump here needs checking against the server's pin.
+dependencies = ["pyyaml>=6", "duckdb>=1.0"]
+
+[project.optional-dependencies]
+html = ["markdown>=3.4"]
+
+[project.urls]
+Homepage = "https://github.com/Foodini-NG/foodini-okf-ingest"
+Repository = "https://github.com/Foodini-NG/foodini-okf-ingest"
+"Upstream (original work)" = "https://github.com/travisjakel/okf-ingest"
+"OKF Specification" = "https://github.com/GoogleCloudPlatform/knowledge-catalog"
+
+[project.scripts]
+# Renamed from the bare "okf": both OKF tools claimed it, which is the documented
+# "`okf --help` runs the generator" trap.
+okf-ingest = "okf.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["okf"]
+
+[tool.uv]
+# Structural enforcement of the "no library newer than 2 weeks" rule
+# (foodini-quality-manager/00-qm-core-rules.md) across ALL transitive
+# dependencies. Bump to (re-lock date - 14 days) whenever re-locking.
+exclude-newer = "2026-08-08T00:00:00Z"

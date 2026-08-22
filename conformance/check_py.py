@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Conformance check: Python binding vs conformance/expected/*.json.
-Run: python conformance/check_py.py  (exit 0 = pass)."""
+Run: python conformance/check_py.py  (exit 0 = pass).
+
+Modified by Foodini 2026-08-22: the binding now lives in src/ rather than py/.
+Derived from okf-ingest by Travis Jakel (Apache-2.0) - see NOTICE."""
 import os, sys, json, shutil, tempfile
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "py"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import okf.okf as okf
 
 HERE = os.path.dirname(__file__)
