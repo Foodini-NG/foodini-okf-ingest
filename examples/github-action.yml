@@ -1,8 +1,11 @@
 # okf-ingest knowledge-base health gate (GitHub Actions).
 #
+# Modified by Foodini 2026-08-22: installs foodini-okf-ingest from git (it is not
+# on any package index) and calls `okf-ingest`, not `okf`. Python 3.14+. See NOTICE.
+#
 # Drop this in your repo as .github/workflows/okf.yml to keep an OKF bundle
 # conformant and healthy on every push/PR. Deterministic, offline, no API key.
-# Set `bundle` to your bundle path. `okf doctor --strict` exits non-zero on
+# Set `bundle` to your bundle path. `okf-ingest doctor --strict` exits non-zero on
 # errors (and on warnings under --strict), failing the check.
 name: OKF health
 
@@ -19,11 +22,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - run: pip install okf-ingest
+          python-version: "3.14"
+      - run: pip install git+https://github.com/Foodini-NG/foodini-okf-ingest.git
       - name: Validate conformance
-        run: okf validate "$bundle" --strict
+        run: okf-ingest validate "$bundle" --strict
       - name: Health report (non-blocking detail)
-        run: okf doctor "$bundle"
+        run: okf-ingest doctor "$bundle"
       - name: Gate on errors
-        run: okf doctor "$bundle" --strict
+        run: okf-ingest doctor "$bundle" --strict

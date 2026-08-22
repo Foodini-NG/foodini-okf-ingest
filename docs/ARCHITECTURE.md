@@ -1,5 +1,11 @@
 # Architecture
 
+> **Modified by Foodini 2026-08-22.** This fork keeps only the Python binding.
+> The description of the core-as-contract design is unchanged and still accurate;
+> the binding inventory below has been trimmed, and the implementation notes for
+> the removed bindings deleted. Derived from okf-ingest by Travis Jakel
+> (Apache-2.0) — see `NOTICE`.
+
 ## The decision: "core + bindings" as a *contract*, not a binary
 
 A literal core+bindings design (Rust/C core, `extendr`/`pyo3` bindings) was
@@ -13,23 +19,23 @@ Instead the **core is two portable, language-neutral artifacts**, and the
 
 | Layer | Artifact | Role |
 |-------|----------|------|
-| Core  | `schema/catalog.sql` | The DuckDB catalog schema — the interop contract. Both bindings emit identical catalogs; queryable with the bare `duckdb` CLI. |
-| Core  | `conformance/` | Golden bundles + `expected/*.json`. The behavioral contract every binding reproduces. |
-| Binding | `r/okf/` | R: yaml, DBI, duckdb, digest, jsonlite. Full surface. |
-| Binding | `py/okf/` | Python: pyyaml, duckdb (stdlib hashlib/json). Full surface. |
-| Binding | `rust/okf-ingest/` | Rust: yaml-rust2, sha1, regex, serde_json, tar/flate2/zip. Fixture-locked core only, catalog-free. |
-| Binding | `cpp/` | C++17: rapidyaml, nlohmann/json, vendored SHA-1; system `tar`/`git` for fetch. Fixture-locked core only, catalog-free. |
-| Binding | `matlab/+okf/` | Pure MATLAB (Octave-compatible, zero toolboxes): minimal YAML-subset parser, pure-M SHA-1, jsonencode, untar/unzip builtins. Fixture-locked core only, catalog-free. |
+| Core  | `schema/catalog.sql` | The DuckDB catalog schema — the interop contract. Queryable with the bare `duckdb` CLI; a catalog written here is readable by any conformant implementation. |
+| Core  | `conformance/` | Golden bundles + `expected/*.json`. The behavioral contract the implementation must reproduce. |
+| Binding | `src/okf/` | Python: pyyaml, duckdb (stdlib hashlib/json). Full surface. |
 
-A new binding (TS, Go, …) is conformant the moment it passes `conformance/`.
-The Rust binding demonstrates that the catalog itself is not part of the
-behavioral contract: every conformance-asserted value (summary fields, content
-hashes, findings, link resolutions, PPR scores, diff deltas) is derivable from
-the in-memory ingest result — DuckDB is the R/Python checkers' *access
-mechanism*, not the contract. A binding that skips the catalog is still fully
-conformant on the core.
+Any implementation is conformant the moment it passes `conformance/`. Note that
+the catalog itself is not part of the behavioral contract: every
+conformance-asserted value (summary fields, content hashes, findings, link
+resolutions, PPR scores, diff deltas) is derivable from the in-memory ingest
+result — DuckDB is the checker's *access mechanism*, not the contract.
 
-## Data flow (identical in both bindings)
+In this fork the corpus no longer proves cross-language parity; it is the
+behavioural regression gate. The values it pins were chosen to be reproducible
+across five independent implementations, which makes them unusually strict
+anchors. Moving one requires updating `conformance/expected/*.json` deliberately,
+with the reason stated in the pull request.
+
+## Data flow
 
 ```
 bundle dir ─▶ read ─▶ parse frontmatter (YAML)         ─┐
@@ -86,7 +92,7 @@ an `okf_read()` bundle, a `.duckdb` path, or an open connection): concepts
 added/removed/changed, `type`/`title` frontmatter changes, and edge/broken-link
 deltas. Pure hash/set comparison sorted by path — catalog-vs-dir is drift since
 last ingest; dir-vs-dir is a snapshot changelog. A dedicated conformance
-fixture (`bundles/diff_a` / `diff_b`) locks both bindings to the same output.
+fixture (`bundles/diff_a` / `diff_b`) locks the output.
 
 `okf_html` is deliberately the thinnest of the three: it rewrites internal `.md`
 links to page-relative `.html` (site) or `#anchors` (single), wraps each concept
@@ -96,7 +102,14 @@ dependency is a markdown engine, optional and guarded (`commonmark` Suggests in
 R; the `okf-ingest[html]` extra in Python). Link resolution reuses
 `okf_resolve_link`, so the rendered graph matches the validated graph exactly.
 
-## Parity notes (where the languages had to be aligned)
+## Parity notes — why the code looks like this
+
+These document decisions made to keep the R and Python bindings byte-identical.
+This fork has no R binding, but **the code they explain is still here and still
+load-bearing**: the timestamp resolver, the body normalisation, the sorted-edge
+PPR accumulation and the reserved-document counting are what make the output
+deterministic and what `conformance/` asserts. Read them before "simplifying"
+any of it.
 
 - **Timestamps**: PyYAML coerces ISO datetimes to `datetime`; R keeps them as
   strings. The Python loader (`_OKFLoader`) drops the timestamp implicit
@@ -118,52 +131,12 @@ R; the `okf-ingest[html]` extra in Python). Link resolution reuses
 - **`timestamp` semantics (OKF v0.2)**: the concept `timestamp` field — and
   the catalog column of the same name — resolves as *frontmatter `timestamp`,
   falling back to `generated.at`* (the v0.2 §13 fallback). Implemented at the
-  single Concept-construction point in every binding so validation, html, and
-  diff inherit it; parity-locked by the `v02` conformance fixture. The MATLAB
-  YAML subset was extended for v0.2's nested shapes (flow maps, one-level
-  block maps, block sequences of maps); deeper nesting still raises the
-  spec-sanctioned `yaml_parse_error`.
-- **MATLAB specifics**: no YAML library exists that keeps timestamps verbatim
-  (yamlmatlab coerces dates — exactly the forbidden behavior), so the binding
-  ships a ~150-line YAML-subset parser (`okf.yaml_parse`): flat `key: value`,
-  quoted strings, flow/block sequences, everything verbatim text;
-  out-of-subset constructs raise the spec-sanctioned `yaml_parse_error`.
-  MATLAB `round()` is round-half-AWAY-from-zero — `okf.round_dec`
-  (`sprintf('%.*f')` + `str2double`) provides the half-even rounding the PPR
-  score lock requires. SHA-1 is a pure-M implementation (no Java — future
-  MATLAB releases drop the JVM). Sorting/tie-breaks use explicit two-key
-  `sortrows` (never relying on sort stability). Archive fetch extracts into a
-  fresh temp dir and containment-checks every returned path afterwards
-  (untar/unzip cannot list members pre-extraction; MATLAB returns absolute
-  paths, Octave member-relative — both handled). The code stays inside the
-  MATLAB/Octave-common subset and CI runs real MATLAB.
-- **C++ specifics**: rapidyaml keeps every scalar as raw text (no implicit
-  typing), so verbatim timestamps and `"0.1"` come free; frontmatter scalars
-  land in JSON as strings (semantically equal, not byte-locked). PPR parity
-  requires the build to never enable fast-math or FMA contraction — CMake
-  pins `-ffp-contract=off` (GCC/Clang) and `/fp:precise` (MSVC); `round_dec`
-  is `snprintf("%.Nf")` + `strtod` (correctly-rounded on glibc and UCRT).
-  Fetch shells out to the system `tar` with fully RELATIVE paths: GNU tar
-  reads drive-colon `-f` args as remote `host:path` syntax and msys tar
-  mishandles drive-colon `-C` targets, so the archive is copied next to the
-  extraction dir first. zip and remote-archive fetch are not supported (use
-  R/Python).
-- **Rust specifics**: yaml-rust2 speaks YAML 1.2 core schema — there is no
-  timestamp tag, so verbatim timestamps come free (no custom loader needed);
-  float scalars keep their raw text. Known unlocked divergences (documented,
-  not chased; no fixture covers them): unquoted `yes`/`no`/`on`/`off` are bools
-  in PyYAML (1.1) but strings in 1.2, and boolean scalars stringify as
-  `True`/`true`/`TRUE` across Python/Rust/R. PPR uses `f64` with the same
-  sorted-edge accumulation order as Python and decimal round-half-even via
-  fixed-precision formatting, so scores are bit-identical. Concepts sort by
-  *relative* forward-slash path in byte order (Python sorts absolute paths —
-  equivalent on the fixtures, and the relative sort is the safer invariant on
-  Windows).
-
+  single Concept-construction point so validation, html, and diff inherit it;
+  locked by the `v02` conformance fixture.
 ## Roadmap
 
 - ~~`okf_chunk` embeddings + vector search~~ — shipped (`embed` / `rag`).
-- ~~An `okf` CLI in both languages~~ — shipped (`validate`/`ingest`/`query`/`context`/`html`/`embed`/`rag`).
+- ~~An `okf` CLI~~ — shipped (`validate`/`ingest`/`query`/`context`/`html`/`embed`/`rag`).
 - ~~git / tar / zip bundle readers~~ — shipped (`okf_fetch`).
 - ~~Interactive graph view + community clustering + backlinks + incremental~~ —
   shipped (`graph`/`export`/`impact`, `okf_clusters`, `--incremental`).

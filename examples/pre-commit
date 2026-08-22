@@ -4,17 +4,19 @@
 # Install:  cp examples/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 #   (or point core.hooksPath at a dir containing this file)
 #
-# Requires `okf` on PATH (pip install okf-ingest  — or Rscript path/to/okf.R).
+# Modified by Foodini 2026-08-22: the command is `okf-ingest`, not `okf`. See NOTICE.
+#
+# Requires `okf-ingest` on PATH (see the repo README for install).
 # Edit BUNDLE to your bundle's location. Exits non-zero (blocking the commit) on
 # conformance errors; with --strict, warnings block too. Deterministic, offline.
 set -euo pipefail
 
 BUNDLE="${OKF_BUNDLE:-.}"     # path to the OKF bundle (default: repo root)
 
-if ! command -v okf >/dev/null 2>&1; then
-  echo "okf not found on PATH — skipping OKF health check (pip install okf-ingest)" >&2
+if ! command -v okf-ingest >/dev/null 2>&1; then
+  echo "okf-ingest not found on PATH — skipping OKF health check" >&2
   exit 0
 fi
 
-echo "okf doctor: checking $BUNDLE …"
-okf doctor "$BUNDLE" --strict
+echo "okf-ingest doctor: checking $BUNDLE …"
+okf-ingest doctor "$BUNDLE" --strict

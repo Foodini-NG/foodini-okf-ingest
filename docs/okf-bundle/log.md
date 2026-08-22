@@ -1,8 +1,8 @@
 ---
 type: Log
 title: Change log
-description: Chronological history of the okf-ingest self-bundle.
-timestamp: 2026-06-23T00:00:00Z
+description: Chronological history of the okf-ingest self-bundle, including the Foodini fork.
+timestamp: 2026-08-22T00:00:00Z
 tags: [log]
 ---
 
@@ -26,3 +26,12 @@ tags: [log]
   seeds -> multi-seed exact PPR; deterministic hybrid retrieval, no
   embeddings); doctor gains `duplicate_identity` + info-level
   `hub_concentration`; `reviewed: true` pages are protected from `--fix`.
+- **2026-08-22** Foodini fork — forked at `f3b58994` (0.11.0). Reduced to the
+  Python binding alone: the R, Rust, C++ and MATLAB bindings and their
+  conformance checkers are removed, as is the original author's `blog/`. The
+  binding moves `py/okf` -> `src/okf`, the distribution becomes
+  `foodini-okf-ingest` and the command becomes `okf-ingest` (the bare `okf`
+  collided with okf-generator). Python floor raised to 3.14, uv-managed. The
+  catalog `schema/` and the `conformance/` corpus are kept unchanged and remain
+  the regression gate. Rationale and licence notices: see `NOTICE` and
+  `CONTRIBUTING.md` at the repo root.

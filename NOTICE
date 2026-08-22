@@ -1,0 +1,51 @@
+foodini-okf-ingest
+Copyright 2026 Foodini
+
+This product includes software developed by Travis Jakel.
+
+------------------------------------------------------------------------
+Original work
+------------------------------------------------------------------------
+
+okf-ingest
+  https://github.com/travisjakel/okf-ingest
+  Copyright Travis Jakel
+  Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Forked at commit f3b58994e54870dde37b2d42a7bff1c0ddbe17b0
+("OKF v0.2 core support + release 0.11.0"), on 2026-08-22.
+
+The upstream project had no NOTICE file at that commit; this file is
+Foodini's, added to record attribution.
+
+------------------------------------------------------------------------
+Modifications by Foodini
+------------------------------------------------------------------------
+
+Per Apache-2.0 section 4(b), files changed by Foodini carry a notice
+saying so. The substantive changes from the fork point are:
+
+  * Reduced to the Python binding. The R, Rust, C++ and MATLAB bindings
+    and their conformance checkers were removed. The catalog schema
+    (schema/catalog.sql) and the conformance corpus (conformance/) are
+    retained unchanged.
+  * Removed the original author's blog/ directory. That material is his
+    writing about his project and is not ours to republish.
+  * Moved the Python package from py/okf to src/okf.
+  * Renamed the distribution from "okf-ingest" to "foodini-okf-ingest",
+    and the console script from "okf" to "okf-ingest".
+  * Raised the minimum Python version from 3.9 to 3.14; the project is
+    uv-managed.
+  * Rewrote the documentation that described the multi-binding design,
+    and updated the self-documenting bundle in docs/okf-bundle
+    accordingly.
+
+------------------------------------------------------------------------
+No endorsement
+------------------------------------------------------------------------
+
+This is an independent fork. Travis Jakel has not endorsed it, has no
+involvement in it, and is not responsible for it. Per Apache-2.0
+section 6, neither his name nor the original project's name is used to
+promote this fork. Bug reports about this fork belong here, never
+upstream.

@@ -1,21 +1,29 @@
 ---
 type: Concept
-title: The R & Python bindings
-description: Two thin, native, mirrored bindings held byte-identical by the conformance corpus.
-timestamp: 2026-06-23T00:00:00Z
-tags: [r, python, bindings]
+title: The Python binding
+description: One thin, native Python package, with the conformance corpus retained as its regression gate.
+timestamp: 2026-08-22T00:00:00Z
+tags: [python, bindings, fork]
 ---
 
-# The R & Python bindings
+# The Python binding
 
-okf-ingest ships as two idiomatic packages — `r/okf` (R) and `py/okf` (Python) —
-that mirror each other function-for-function. Neither is a wrapper around the
-other; both are native, thin (~few hundred lines), and write the same
-[catalog](catalog.md).
+This fork ships **one** binding: `src/okf` (Python) — native, thin (~1,900
+lines), and the writer of the [catalog](catalog.md).
 
-They are kept honest by [conformance & parity](conformance.md): a shared corpus
-asserts byte-identical output, so you can [ingest](sources.md) in one and
-[query](query.md) in the other. Mirrored constants (the schema, the
-[render](render.md) templates) are kept in sync by hand, flagged in code
-comments. This dual-binding design is why okf-ingest exists — there was no R or
-Python OKF tooling. See [install](install.md).
+The original work ships five bindings (R, Python, Rust, C++, MATLAB) held
+byte-identical by a shared corpus, so that a change is portable across all of
+them. This fork drops the other four. The reason is cost, not disagreement:
+holding five implementations in step means two to five implementations per
+change and CI in four languages Foodini does not write. That trade only pays
+when the bindings are the product; here the tool is.
+
+What survives is the part that was worth keeping. The
+[conformance corpus](conformance.md) is language-neutral, and its Python checker
+is standalone, so it remains the regression gate for every change — see
+[determinism](determinism.md) for why that matters. The catalog
+[schema](catalog.md) is likewise unchanged, so a catalog written here is still
+readable by any conformant implementation, including the original's.
+
+Install is correspondingly simpler — see [install](install.md). Point it at any
+[source](sources.md) and [query](query.md) or [render](render.md) the result.

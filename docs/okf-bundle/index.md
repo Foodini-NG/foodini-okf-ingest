@@ -9,23 +9,23 @@ tags: [okf, index]
 # okf-ingest — self-describing bundle
 
 okf-ingest documented *as an OKF bundle* — dogfood: this folder is a real,
-conformant bundle you can ingest, render (`okf html` / `okf graph`), and check
-(`okf doctor`) with the tool itself.
+conformant bundle you can ingest, render (`okf-ingest html` / `okf-ingest graph`), and check
+(`okf-ingest doctor`) with the tool itself.
 
 ## Concepts
 
 - [Determinism & no agents](determinism.md) — the core principle
 - [The OKF format](okf-spec.md) — what a bundle is
 - [The DuckDB catalog](catalog.md) — the interop contract
-- [Conformance & parity](conformance.md) — how R and Python stay identical
-- [The R & Python bindings](bindings.md) — thin, native, mirrored
+- [Conformance & parity](conformance.md) — the golden-bundle regression gate
+- [The Python binding](bindings.md) — thin, native, one language
 - [Sources](sources.md) — dir, git, tar/zip
 - [Validate](validate.md) — the conformance lint
 - [The concept graph](links.md) — links, backlinks, impact
 - [Query](query.md) — SQL and helpers over the catalog
 - [Context](context.md) — the index-first LLM-wiki primitive
 - [CLI](cli.md) — the command surface
-- [Install](install.md) — PyPI, R-universe, dev
+- [Install](install.md) — uv, from a clone
 - [Rendering](render.md) — HTML site, interactive graph, Mermaid
 - [Semantic search](search.md) — the optional embed/rag layer
 - [Incremental](incremental.md) — re-ingest/re-embed only what changed
