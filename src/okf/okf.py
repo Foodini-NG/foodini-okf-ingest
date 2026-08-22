@@ -1,9 +1,13 @@
 """okf — Open Knowledge Format ingestion (Python binding).
 
-Mirrors the R reference binding (r/okf/R/okf.R) and writes a byte-compatible
-DuckDB catalog against the same schema (schema/catalog.sql), so a bundle
-ingested by either language yields the same catalog. Implements OKF v0.1
-permissive consumption: never rejects a bundle for recommended-field issues.
+Modified by Foodini 2026-08-22: --subdir is honoured for local directory
+sources, via a single bundle-root resolution path shared by every source kind.
+Derived from okf-ingest by Travis Jakel (Apache-2.0) — see NOTICE.
+
+Writes a catalog against schema/catalog.sql, the interop contract, so a bundle
+ingested here yields a catalog any conformant implementation can read — including
+the original work's other bindings. Implements OKF v0.1 permissive consumption:
+never rejects a bundle for recommended-field issues.
 
 Public API:
     read_bundle(root)            -> Bundle (concepts + raw links)
