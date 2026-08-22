@@ -104,6 +104,42 @@ check("minimal.validation_rows",
       conm.execute("SELECT count(*) FROM okf_validation").fetchone()[0], 0)
 conm.close()
 
+# --- finding filters + summary (validate's severity/rule/path selection) ---
+# Added by Foodini 2026-08-23. The important assertion is the last one: filters
+# narrow what is REPORTED, never what conformance is judged on.
+import io as _io, contextlib as _ctx  # noqa: E402
+expf = json.load(open(os.path.join(HERE, "expected", "filters.json")))
+_neg = os.path.join(HERE, "bundles", "negative")
+_nb = okf.read_bundle(_neg)
+_nv = okf.validate(_nb)
+_e = expf["negative"]
+_sum = okf.summarize_findings(_nv)
+check("filters.total", _sum["total"], _e["total"])
+check("filters.by_severity", _sum["by_severity"], _e["by_severity"])
+check("filters.by_rule", _sum["by_rule"], _e["by_rule"])
+check("filters.only_errors",
+      len(okf.filter_findings(_nv, severities=["error"])), _e["only_errors"])
+check("filters.exclude_missing_type",
+      len(okf.filter_findings(_nv, exclude_rules=["missing_type"])),
+      _e["exclude_missing_type"])
+check("filters.path_matches_nothing",
+      len(okf.filter_findings(_nv, paths=["nothing/*"])), _e["path_matches_nothing"])
+check("filters.path_prefix",           # no wildcard -> treated as a path prefix
+      len(okf.filter_findings(_nv, paths=["missing_type.md"])),
+      _e["path_prefix_missing_type_md"])
+
+# Filtering must not be able to hide non-conformance. This exercises cli.py,
+# which the rest of the corpus never reaches.
+from okf.cli import main as _cli_main  # noqa: E402
+_buf = _io.StringIO()
+with _ctx.redirect_stdout(_buf):
+    _rc = _cli_main(["validate", _neg, "--path", "nothing/*", "--json"])
+check("filters.cli_hidden_errors_still_fail", _rc, expf["cli_safety"]["exit_code"])
+_out = json.loads(_buf.getvalue())
+check("filters.cli_conformant_unfiltered", _out["conformant"], False)
+check("filters.cli_errors_unfiltered", _out["errors"], 2)
+check("filters.cli_reports_suppression", _out["filtered"]["suppressed"], 4)
+
 # --- wikilinks ([[name]] resolved by id/alias/title/stem; markdown unchanged) ---
 conw, sw = okf.ingest(os.path.join(HERE, "bundles", "wikilinks"))
 expw = json.load(open(os.path.join(HERE, "expected", "wikilinks.json")))

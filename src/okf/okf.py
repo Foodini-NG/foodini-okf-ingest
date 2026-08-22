@@ -1,10 +1,11 @@
 """okf — Open Knowledge Format ingestion (Python binding).
 
-Modified by Foodini 2026-08-22: --subdir is honoured for local directory
+Modified by Foodini 2026-08-22/23: --subdir is honoured for local directory
 sources, via a single bundle-root resolution path shared by every source
-kind; and catalog writes are batched into multi-row INSERT ... VALUES
-statements instead of one execute() per row. Derived from okf-ingest by
-Travis Jakel (Apache-2.0) — see NOTICE.
+kind; catalog writes are batched into multi-row INSERT ... VALUES statements
+instead of one execute() per row; and findings can be filtered and
+summarised (filter_findings / summarize_findings). Derived from okf-ingest
+by Travis Jakel (Apache-2.0) — see NOTICE.
 
 Writes a catalog against schema/catalog.sql, the interop contract, so a bundle
 ingested here yields a catalog any conformant implementation can read — including
@@ -14,12 +15,14 @@ never rejects a bundle for recommended-field issues.
 Public API:
     read_bundle(root)            -> Bundle (concepts + raw links)
     validate(bundle)             -> list[Finding]
+    filter_findings(findings, ...) -> list[Finding]
+    summarize_findings(findings) -> dict (counts by severity / rule / path prefix)
     links(bundle)                -> list[Link]
     ingest(root, db_path)        -> (duckdb.Connection, summary dict)
     search(con, term)            -> rows
 """
 from __future__ import annotations
-import os, re, json, hashlib, datetime, tempfile, shutil, subprocess, tarfile, zipfile, urllib.request
+import os, re, json, fnmatch, hashlib, datetime, tempfile, shutil, subprocess, tarfile, zipfile, urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
 import yaml
@@ -303,6 +306,73 @@ def validate(b: Bundle) -> list:
         if c.path not in inbound:
             add(c.path, "warn", "orphan", "no inbound links (orphan concept)")
     return out
+
+
+def _path_matches(path: str, pattern: str) -> bool:
+    """A pattern with a wildcard is an fnmatch glob; one without is a path prefix.
+
+    Both forms are needed. `standards/` as a prefix is what anyone reaches for
+    first, but a prefix cannot express "generated concepts live two levels deep"
+    — `github-repositories/*/*` can.
+    """
+    if any(ch in pattern for ch in "*?["):
+        return fnmatch.fnmatch(path, pattern)
+    return path.startswith(pattern)
+
+
+def filter_findings(findings: list, severities=None, rules=None, exclude_rules=None,
+                    paths=None, exclude_paths=None) -> list:
+    """Select findings by severity, rule and path. Order is preserved.
+
+    Excludes win over includes. Each of `paths`/`exclude_paths` is a list of
+    globs-or-prefixes (see `_path_matches`); a finding matches the list if it
+    matches any entry.
+
+    Deliberately operates on a plain findings list — the same shape `validate()`
+    and `doctor()` both produce — so it works either side of ingest.
+    """
+    out = []
+    for f in findings:
+        if severities and f["severity"] not in severities:
+            continue
+        if rules and f["rule"] not in rules:
+            continue
+        if exclude_rules and f["rule"] in exclude_rules:
+            continue
+        if paths and not any(_path_matches(f["path"], p) for p in paths):
+            continue
+        if exclude_paths and any(_path_matches(f["path"], p) for p in exclude_paths):
+            continue
+        out.append(f)
+    return out
+
+
+def summarize_findings(findings: list, prefix_depth: int = 2) -> dict:
+    """Counts by severity, by (severity, rule), and by leading path segment.
+
+    `by_prefix` groups on the first `prefix_depth` path segments, which is what
+    makes "which part of the bundle are these in?" answerable without reading
+    every line. Every list is sorted: by count descending then name, so the
+    output is stable for the same input.
+    """
+    by_sev, by_rule, by_prefix = {}, {}, {}
+    for f in findings:
+        sev, rule = f["severity"], f["rule"]
+        by_sev[sev] = by_sev.get(sev, 0) + 1
+        by_rule[(sev, rule)] = by_rule.get((sev, rule), 0) + 1
+        pre = "/".join(f["path"].split("/")[:prefix_depth])
+        by_prefix[pre] = by_prefix.get(pre, 0) + 1
+
+    def rank(d, key):
+        return [{**key(k), "count": v}
+                for k, v in sorted(d.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+    return {
+        "total": len(findings),
+        "by_severity": {k: by_sev[k] for k in sorted(by_sev)},
+        "by_rule": rank(by_rule, lambda k: {"severity": k[0], "rule": k[1]}),
+        "by_prefix": rank(by_prefix, lambda k: {"prefix": k}),
+    }
 
 
 def _source_kind(source: str) -> str:

@@ -1,0 +1,21 @@
+{
+  "_comment": "Added by Foodini 2026-08-23 for validate's finding filters and summary mode. Pins the filter primitives and the safety rule that conformance is computed over UNFILTERED findings, so hiding an error can never make a bundle look conformant.",
+  "negative": {
+    "total": 4,
+    "by_severity": { "error": 2, "warn": 2 },
+    "by_rule": [
+      { "severity": "error", "rule": "frontmatter_unparseable", "count": 1 },
+      { "severity": "error", "rule": "missing_type", "count": 1 },
+      { "severity": "warn", "rule": "missing_timestamp", "count": 1 },
+      { "severity": "warn", "rule": "orphan", "count": 1 }
+    ],
+    "only_errors": 2,
+    "exclude_missing_type": 3,
+    "path_matches_nothing": 0,
+    "path_prefix_missing_type_md": 3
+  },
+  "cli_safety": {
+    "comment": "validate on the negative bundle, filtered so no finding is shown, must still exit 1 and report conformant=false",
+    "exit_code": 1
+  }
+}
