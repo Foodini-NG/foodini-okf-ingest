@@ -1,0 +1,5 @@
+# Added by Foodini 2026-08-22.
+# Every change needs a review from one of these two. Deliberately blanket:
+# the codebase is small enough that per-path ownership would be noise, and
+# the point is that nothing lands unreviewed.
+*   @kent-foodini @cameron-foodini
