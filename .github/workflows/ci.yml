@@ -27,10 +27,21 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           version: "0.11.17"
-      - name: Install package
-        run: uv pip install --system -e ".[html]"
+      - name: Provision Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Create the venv and install
+        # A venv, not --system: the runner's system interpreter is Debian's 3.12
+        # and is externally managed, so --system both targets the wrong version
+        # and is refused. Putting .venv/bin on PATH makes `python` and the
+        # `okf-ingest` console script resolve to it for every later step.
+        run: |
+          uv venv --python ${{ matrix.python-version }}
+          uv pip install -e ".[html]"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Conformance suite
-        run: python conformance/check_py.py
+        run: |
+          python --version
+          python conformance/check_py.py
       - name: CLI smoke
         run: |
           okf-ingest validate conformance/bundles/store
