@@ -1,5 +1,0 @@
-^bin$
-^.*\.Rproj$
-^\.Rproj\.user$
-^\.git$
-^cran-comments\.md$
