@@ -1,9 +1,15 @@
 """okf — Open Knowledge Format ingestion (Python binding).
 
-Mirrors the R reference binding (r/okf/R/okf.R) and writes a byte-compatible
-DuckDB catalog against the same schema (schema/catalog.sql), so a bundle
-ingested by either language yields the same catalog. Implements OKF v0.1
-permissive consumption: never rejects a bundle for recommended-field issues.
+Modified by Foodini 2026-08-22: --subdir is honoured for local directory
+sources, via a single bundle-root resolution path shared by every source
+kind; and catalog writes are batched into multi-row INSERT ... VALUES
+statements instead of one execute() per row. Derived from okf-ingest by
+Travis Jakel (Apache-2.0) — see NOTICE.
+
+Writes a catalog against schema/catalog.sql, the interop contract, so a bundle
+ingested here yields a catalog any conformant implementation can read — including
+the original work's other bindings. Implements OKF v0.1 permissive consumption:
+never rejects a bundle for recommended-field issues.
 
 Public API:
     read_bundle(root)            -> Bundle (concepts + raw links)
@@ -321,9 +327,25 @@ def _assert_safe_members(base: str, names) -> None:
             raise RuntimeError(f"archive member escapes target dir (path traversal): {n!r}")
 
 
+class SubdirNotFound(ValueError):
+    """--subdir named a path that is not in the source. Subclasses ValueError
+    so callers that already catch ValueError keep working."""
+
+
 def _bundle_root(base: str, subdir: Optional[str]) -> str:
+    """Resolve the directory a bundle actually lives in.
+
+    ONE resolution path for every source kind. It used to be reachable only for
+    git and archive sources, so `--subdir` was accepted and silently ignored for
+    local directories and the whole bundle was scanned instead.
+    """
     if subdir:
-        return os.path.join(base, subdir)
+        root = os.path.join(base, subdir)
+        if not os.path.isdir(root):
+            raise SubdirNotFound(
+                f"--subdir does not exist in the source: {subdir!r} "
+                f"(looked for {root!r})")
+        return root
     cur = base
     for _ in range(6):
         entries = [e for e in os.listdir(cur) if not e.startswith(".")]
@@ -340,7 +362,7 @@ def fetch(source: str, subdir: Optional[str] = None, branch: Optional[str] = Non
     """Materialize a bundle from a dir, git URL, or tar/zip (local or remote).
     Returns (dir, source_kind, cleanup); the caller must call cleanup()."""
     if os.path.isdir(source):
-        return os.path.realpath(source), "dir", (lambda: None)
+        return _bundle_root(os.path.realpath(source), subdir), "dir", (lambda: None)
     kind = _source_kind(source)
     tmp = tempfile.mkdtemp(prefix="okf_")
 
@@ -392,7 +414,10 @@ def ingest(root, db_path: str = ":memory:", ingested_at: Optional[str] = None,
             d, kind, cleanup = fetch(root, subdir=subdir, branch=branch)
             b = read_bundle(d, bundle_id, kind)
         else:
-            b = read_bundle(root, bundle_id, source_kind)
+            # A local directory used to skip fetch() entirely and land here with
+            # `subdir` unused, which is the second way the flag went missing.
+            b = read_bundle(_bundle_root(os.path.realpath(root), subdir),
+                            bundle_id, source_kind)
         return _ingest_bundle(b, db_path, ingested_at, incremental)
     finally:
         if cleanup:
@@ -404,6 +429,31 @@ def _concept_row(b, c):
             c.resource, None if c.tags is None else json.dumps(c.tags),
             c.timestamp, c.body, json.dumps(c.frontmatter or {}),
             c.parse_error, c.content_hash]
+
+
+_INSERT_CHUNK = 500
+
+
+def _insert_many(con, table: str, ncols: int, rows: list) -> None:
+    """Insert `rows` into `table` as multi-row INSERT ... VALUES statements.
+
+    DuckDB is columnar: a single-row INSERT is a whole append operation, so one
+    statement per row is pathologically slow. `executemany` does not fix it —
+    measured on 20,000 link rows, per-row 38.2s, executemany 25.7s (1.5x), a
+    multi-row VALUES list 7.7s (4.9x). Chunking keeps the statement and its
+    parameter list bounded; 100-5000 rows/chunk all measured within ~10% of each
+    other, so the exact size is not delicate.
+
+    `table` and `ncols` are module constants, never caller input — they are
+    interpolated into the statement, the row values are always bound.
+    """
+    if not rows:
+        return
+    tup = "(" + ",".join("?" * ncols) + ")"
+    for i in range(0, len(rows), _INSERT_CHUNK):
+        batch = rows[i:i + _INSERT_CHUNK]
+        con.execute(f"INSERT INTO {table} VALUES " + ",".join([tup] * len(batch)),
+                    [v for r in batch for v in r])
 
 
 def _ingest_bundle(b, db_path, ingested_at, incremental=False):
@@ -433,19 +483,19 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
         removed = [p for p in prior if p not in cur]
         drop = changed + removed
         if drop:
-            con.execute("DELETE FROM okf_concept WHERE bundle_id = ? AND path IN ({})".format(
-                ",".join("?" * len(drop))), [bid] + drop)
-        for c in b.concepts:
-            if c.path in changed or c.path in added:
-                con.execute("INSERT INTO okf_concept VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", _concept_row(b, c))
+            con.execute("DELETE FROM okf_concept WHERE bundle_id = ? "
+                        "AND path IN (SELECT unnest(?::VARCHAR[]))", [bid, drop])
+        write = set(changed) | set(added)          # set: `in` over lists made this O(n^2)
+        _insert_many(con, "okf_concept", 13,
+                     [_concept_row(b, c) for c in b.concepts if c.path in write])
         kept = len(set(cur) & set(prior))
         inc_stats = {"changed": len(changed), "added": len(added),
                      "removed": len(removed), "cached": kept - len(changed)}
     else:
         for t in ("okf_bundle", "okf_concept", "okf_link", "okf_validation"):
             con.execute(f"DELETE FROM {t} WHERE bundle_id = ?", [bid])
-        for c in b.concepts:
-            con.execute("INSERT INTO okf_concept VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", _concept_row(b, c))
+        _insert_many(con, "okf_concept", 13,
+                     [_concept_row(b, c) for c in b.concepts])
 
     # Bundle row + graph-global tables: always rewritten to current state.
     con.execute("DELETE FROM okf_bundle WHERE bundle_id = ?", [bid])
@@ -454,12 +504,11 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
                  len(non_reserved), n_conf, len(err_paths) == 0])
     con.execute("DELETE FROM okf_link WHERE bundle_id = ?", [bid])
     con.execute("DELETE FROM okf_validation WHERE bundle_id = ?", [bid])
-    for lk_ in lk:
-        con.execute("INSERT INTO okf_link VALUES (?,?,?,?,?)",
-                    [bid, lk_["src_path"], lk_["dst_raw"], lk_["dst_path"], lk_["resolved"]])
-    for f in val:
-        con.execute("INSERT INTO okf_validation VALUES (?,?,?,?,?)",
-                    [bid, f["path"], f["severity"], f["rule"], f["message"]])
+    _insert_many(con, "okf_link", 5,
+                 [[bid, x["src_path"], x["dst_raw"], x["dst_path"], x["resolved"]]
+                  for x in lk])
+    _insert_many(con, "okf_validation", 5,
+                 [[bid, f["path"], f["severity"], f["rule"], f["message"]] for f in val])
 
     summary = {
         "n_files": len(b.concepts), "n_concepts": len(non_reserved), "n_conformant": n_conf,
