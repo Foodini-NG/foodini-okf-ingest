@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """okf — command-line interface (Python).
 
-Modified by Foodini 2026-08-22: `validate` gains --subdir, so every subcommand
-that takes a source now accepts it. Derived from okf-ingest by Travis Jakel
-(Apache-2.0) — see NOTICE.
+Modified by Foodini 2026-08-22/23: `validate` gains --subdir, so every
+subcommand that takes a source now accepts it; and gains --summary plus
+severity/rule/path filters, so "is the hand-written layer clean?" is a
+first-class question rather than a shell pipeline. Derived from okf-ingest by
+Travis Jakel (Apache-2.0) — see NOTICE.
 
-  okf validate <bundle> [--subdir <p>] [--strict] [--json]
+  okf validate <bundle> [--subdir <p>] [--strict] [--json] [--summary]
+               [--severity S,..] [--rule R,..] [--exclude-rule R,..]
+               [--path G,..] [--exclude-path G,..]
   okf ingest   <bundle> --db <path> [--id <id>] [--json]
   okf query    <db> [--sql "..."] [--search <term>] [--concepts] [--links] [--findings] [--json]
   okf context  <bundle|db> [--start <path>] [--depth N] [--max-tokens N] [--no-index] [--rank ppr] [--query "..."]
@@ -40,6 +44,11 @@ def _print(rows, cols, as_json):
             print(" | ".join("" if v is None else str(v) for v in r))
 
 
+def _csv(v):
+    """Comma-separated option value -> list, or None when unset."""
+    return [x.strip() for x in v.split(",") if x.strip()] if v else None
+
+
 def main(argv=None):
     try:
         return _main(argv)
@@ -55,6 +64,16 @@ def _main(argv=None):
     v = sub.add_parser("validate"); v.add_argument("bundle")
     v.add_argument("--subdir", default=None)
     v.add_argument("--strict", action="store_true"); v.add_argument("--json", action="store_true")
+    v.add_argument("--summary", action="store_true",
+                   help="counts by severity, rule and path prefix instead of every finding")
+    v.add_argument("--severity", default=None, help="comma-separated: error,warn")
+    v.add_argument("--rule", default=None, help="comma-separated rule ids to include")
+    v.add_argument("--exclude-rule", default=None, dest="exclude_rule",
+                   help="comma-separated rule ids to drop")
+    v.add_argument("--path", default=None,
+                   help="comma-separated globs or path prefixes to include")
+    v.add_argument("--exclude-path", default=None, dest="exclude_path",
+                   help="comma-separated globs or path prefixes to drop")
 
     i = sub.add_parser("ingest"); i.add_argument("bundle")
     i.add_argument("--db", default=":memory:"); i.add_argument("--id", default=None)
@@ -119,16 +138,52 @@ def _main(argv=None):
         # fetch(), so it needs the same root resolution applied explicitly.
         b = okf.read_bundle(okf._bundle_root(os.path.realpath(a.bundle), a.subdir))
         val = okf.validate(b)
+
+        # `conformant` is deliberately computed over the UNFILTERED findings.
+        # Conformance is a property of the bundle, not of the view you asked for:
+        # hiding an error must never make a bundle look conformant. Filters
+        # narrow what is reported, and what --strict gates warnings on.
         nerr = sum(1 for f in val if f["severity"] == "error")
-        nwarn = sum(1 for f in val if f["severity"] == "warn")
         conf = nerr == 0
+
+        shown = okf.filter_findings(
+            val,
+            severities=_csv(a.severity), rules=_csv(a.rule),
+            exclude_rules=_csv(a.exclude_rule),
+            paths=_csv(a.path), exclude_paths=_csv(a.exclude_path))
+        filtered = len(shown) != len(val)
+        nwarn = sum(1 for f in shown if f["severity"] == "warn")
+        summary = okf.summarize_findings(shown)
+
         if a.json:
-            print(json.dumps({"bundle": a.bundle, "conformant": conf, "errors": nerr,
-                              "warnings": nwarn, "findings": val}, indent=2))
+            out = {"bundle": a.bundle, "conformant": conf, "errors": nerr,
+                   "warnings": nwarn, "summary": summary}
+            if filtered:
+                out["filtered"] = {"shown": len(shown), "total": len(val),
+                                   "suppressed": len(val) - len(shown)}
+            if not a.summary:
+                out["findings"] = shown
+            print(json.dumps(out, indent=2))
         else:
-            print(f"bundle: {a.bundle}\nconformant: {conf}  (errors: {nerr}, warnings: {nwarn})")
-            for f in val:
-                print(f"  [{f['severity']:<5}] {f['rule']:<22} {f['path']} — {f['message']}")
+            print(f"bundle: {a.bundle}")
+            print(f"conformant: {conf}  (errors: {nerr}, warnings: {nwarn})")
+            if filtered:
+                # Always say what was hidden. A filtered run that looks clean
+                # must not be mistakable for a clean bundle.
+                print(f"filtered: showing {len(shown):,} of {len(val):,} findings "
+                      f"({len(val) - len(shown):,} suppressed)")
+            if a.summary:
+                for row in summary["by_rule"]:
+                    print(f"  {row['count']:>8,}  [{row['severity']:<5}] {row['rule']}")
+                if summary["by_prefix"]:
+                    print("  by path prefix:")
+                    for row in summary["by_prefix"][:20]:
+                        print(f"  {row['count']:>8,}  {row['prefix']}")
+                    if len(summary["by_prefix"]) > 20:
+                        print(f"           …  {len(summary['by_prefix']) - 20} more prefixes")
+            else:
+                for f in shown:
+                    print(f"  [{f['severity']:<5}] {f['rule']:<22} {f['path']} — {f['message']}")
         return 1 if (not conf or (a.strict and nwarn > 0)) else 0
 
     def _open(source, subdir, branch):

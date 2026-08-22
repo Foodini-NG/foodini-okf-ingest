@@ -35,3 +35,11 @@ tags: [log]
   catalog `schema/` and the `conformance/` corpus are kept unchanged and remain
   the regression gate. Rationale and licence notices: see `NOTICE` and
   `CONTRIBUTING.md` at the repo root.
+- **2026-08-23** `validate` gains `--summary` and severity / rule / path filters.
+  A bundle mixing hand-written and generated concepts produces warnings that are
+  overwhelmingly expected, and the flat list had no usable signal — 23,723
+  warnings in the case that prompted this, all of them in the generated layer.
+  Path patterns are globs, except that a pattern with no wildcard is a prefix.
+  Filters change what is *reported*, never what conformance is judged on:
+  `conformant` and the error count are always computed over every finding, and a
+  filtered run states how many it suppressed.

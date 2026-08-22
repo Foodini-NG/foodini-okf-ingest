@@ -280,7 +280,9 @@ After install, `okf-ingest …` (the console script). Without installing,
 `PYTHONPATH=src python -m okf …` takes the same arguments.
 
 ```bash
-okf-ingest validate <bundle> [--strict] [--json]      # lint; exit 1 on errors (or warnings w/ --strict)
+okf-ingest validate <bundle> [--subdir <p>] [--strict] [--json]   # lint; exit 1 on errors (or warnings w/ --strict)
+                     [--summary] [--severity S,..] [--rule R,..] [--exclude-rule R,..]
+                     [--path G,..] [--exclude-path G,..]           # narrow the findings; globs or path prefixes
 okf-ingest ingest   <source> --db catalog.duckdb [--subdir <p>] [--branch <b>] [--incremental] [--json]
 okf-ingest query    catalog.duckdb [--sql "…"] [--search <term>] [--concepts|--links|--findings] [--json]
 okf-ingest context  <bundle|catalog> [--start <concept>] [--depth N] [--max-tokens N]  # LLM-wiki context blob
