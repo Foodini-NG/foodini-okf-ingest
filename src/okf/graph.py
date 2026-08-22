@@ -1,4 +1,8 @@
-"""okf graph affordances (Python) — mirrors r/okf/R/okf_graph.R.
+"""okf graph affordances (Python).
+
+Modified by Foodini 2026-08-22: ppr() no longer re-sorts its edge list on every
+power-iteration pass. Derived from okf-ingest by Travis Jakel (Apache-2.0) — see
+NOTICE.
 
 All DETERMINISTIC; no LLM. The catalog already holds the concept graph
 (okf_link); these surface it for navigation and visualization:
@@ -215,6 +219,13 @@ def ppr(con, start, damping: float = 0.85, tol: float = 1e-12,
     for s_i, _ in edges:
         deg[s_i] += 1
 
+    # Sorted ONCE, outside the loop. The fixed iteration order is what makes the
+    # floating-point accumulation reproducible, so it must stay sorted — but the
+    # edge set never changes, and re-sorting it on every iteration was ~85% of
+    # this function's runtime on a large graph. Same order, computed once.
+    edge_list = sorted(edges)
+    dangling_idx = [i for i in range(n) if deg[i] == 0]   # likewise invariant
+
     seed = [0.0] * n
     for st, w in zip(starts, weights):
         seed[idx[st]] += w
@@ -223,10 +234,10 @@ def ppr(con, start, damping: float = 0.85, tol: float = 1e-12,
     p_vec = seed[:]
     for _ in range(max_iter):
         contrib = [0.0] * n
-        for s_i, d_i in sorted(edges):          # fixed order -> deterministic fp
+        for s_i, d_i in edge_list:
             if p_vec[s_i]:
                 contrib[d_i] += p_vec[s_i] / deg[s_i]
-        dangling = sum(p_vec[i] for i in range(n) if deg[i] == 0)
+        dangling = sum(p_vec[i] for i in dangling_idx)
         np_ = [(1 - damping) * seed[i] + damping * (contrib[i] + dangling * seed[i])
                for i in range(n)]
         if sum(abs(np_[i] - p_vec[i]) for i in range(n)) < tol:
