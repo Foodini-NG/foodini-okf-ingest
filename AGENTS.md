@@ -30,9 +30,17 @@ Module ownership, for scoping a change:
 
 ## Hard rules
 
-1. **Never send anything upstream.** No PRs, no issues, no bug reports to
-   `travisjakel/okf-ingest`. This fork diverges deliberately. The `upstream`
-   remote is fetch-only and its push URL is disabled on purpose.
+1. **Never open a pull request or issue against `travisjakel/okf-ingest`
+   yourself.** Interacting with a third-party repository is outward-facing; a
+   human decides and a human carries it. The `upstream` remote is fetch-only and
+   its push URL is disabled on purpose.
+
+   This is about *who acts*, not about whether upstream is the right target. It
+   often is — see `CONTRIBUTING.md`. If a change you are making looks generally
+   useful rather than Foodini-specific, **say so in the pull request** and
+   recommend it go upstream instead. Never carry this fork's own divergences
+   there (the renamed command, the 3.14 floor, the removed bindings, our
+   packaging) — those are our choices, not upstream's problem.
 2. **Never put Foodini bundle content in this repo.** No internal repo names,
    identifiers, paths, or measurements taken from the private knowledge bundle.
    This repository is public. Reproductions are synthetic — use

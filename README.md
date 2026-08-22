@@ -23,10 +23,14 @@
 > `okf-ingest` (the original's bare `okf` collides with okf-generator).
 >
 > **This fork is independent.** Travis Jakel has not endorsed it and is not
-> responsible for it. **Report problems with this fork here, never upstream.**
-> If you want the original, multi-language tool, go
-> [there](https://github.com/travisjakel/okf-ingest) — it is actively developed
-> and it is the better choice unless you specifically want this reduced build.
+> responsible for it, so report problems *with this fork* here rather than to him.
+>
+> **If you want the tool rather than our build of it, go
+> [upstream](https://github.com/travisjakel/okf-ingest).** Five bindings instead
+> of one, actively developed, properly packaged — for most people it is simply the
+> better choice, and a fix contributed there helps far more users than the same
+> fix here. We forked to avoid maintaining four bindings we do not write, not
+> because we thought we could do it better.
 
 A unified, open-source **ingestion tool for [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog) (OKF) bundles** — read any OKF bundle, validate its conformance (permissively, per the spec), build the concept graph, and load it into a portable, queryable **DuckDB catalog**. One catalog format, one idiomatic **Python** package.
 
@@ -512,9 +516,11 @@ The feature surface came from upstream complete and the conformance contract is
 locked, so behaviour is stable. What this fork does *not* offer is a general
 support commitment: it exists to serve Foodini's knowledge pipeline, it is not
 published to any package index, and it will diverge from upstream over time.
-Issues and PRs from outside Foodini are welcome but will be judged on whether
-they help that purpose. If you want the general-purpose tool, use
-[the original](https://github.com/travisjakel/okf-ingest).
+Issues and PRs are welcome here. But if your change is generally useful rather
+than specific to how Foodini runs this, **please take it to
+[the original](https://github.com/travisjakel/okf-ingest) instead** — it has five
+bindings to our one, it is actively developed, and a fix landed there helps far
+more people. See [CONTRIBUTING.md](CONTRIBUTING.md) for where the line falls.
 
 ## Roadmap
 

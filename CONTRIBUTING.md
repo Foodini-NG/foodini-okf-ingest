@@ -2,18 +2,46 @@
 
 > **Rewritten by Foodini 2026-08-22.** This replaces the original work's
 > CONTRIBUTING.md, whose rules were built around holding five language bindings
-> in lockstep and around contributing to `travisjakel/okf-ingest`. Neither
-> applies here. Derived from okf-ingest by Travis Jakel (Apache-2.0) — see
+> in lockstep. Derived from okf-ingest by Travis Jakel (Apache-2.0) — see
 > `NOTICE`.
 
-This is a **fork maintained for Foodini's own use**, not a community project.
-Changes are welcome, but they are judged on whether they serve Foodini's
-knowledge pipeline. If you want the general-purpose, multi-language tool, use
-[the original](https://github.com/travisjakel/okf-ingest) — it is actively
-developed and it is the better choice.
+**Contributions here are welcome** — open an issue or a pull request. This is a
+fork maintained for Foodini's own use, so changes are judged partly on whether
+they serve that purpose, but a good fix is a good fix and we would rather have it.
 
-**Do not send our changes upstream, and do not report our bugs upstream.** This
-fork diverges deliberately.
+## Consider contributing to the original instead — it is probably the better home
+
+If your change is **generally useful rather than Foodini-specific**, please take
+it to [**travisjakel/okf-ingest**](https://github.com/travisjakel/okf-ingest)
+first. It is the better place for it, for concrete reasons:
+
+* **Five bindings, not one.** R, Python, Rust, C++ and MATLAB, held
+  byte-identical by the shared conformance corpus. A fix landed there reaches
+  every one of them; the same fix landed here reaches Python on Foodini's
+  machines. That is a large difference in who benefits.
+* **It is actively developed.** Six releases in six weeks over 2026-06/08, plus
+  CRAN and conda-forge packaging. Not a dormant project.
+* **It is the real project.** This fork exists because Foodini did not want to
+  maintain four bindings it does not write — not because of any disagreement with
+  the original's design. Upstream has the wider audience, the maintainer who
+  knows the code best, and the packaging to distribute a fix properly.
+* **Its `CONTRIBUTING.md` sets a clear bar** — deterministic core, the
+  conformance contract, both R and Python moved together. Worth reading; the
+  design line is a good one and we kept it here.
+
+So: a bug in OKF parsing, link resolution, PPR, diff, doctor or rendering almost
+certainly belongs upstream. Something that only matters because of how Foodini
+runs this — our packaging, our Python floor, our pipeline integration — belongs
+here.
+
+If you are unsure, open an issue here and we will say which we think it is. And
+if a change lands upstream that we are carrying separately, tell us: we would
+rather drop our version and take theirs.
+
+**One thing we ask.** Do not carry *this fork's* divergences upstream, and do not
+report bugs upstream that are ours rather than theirs — the renamed command, the
+3.14 floor, the removed bindings, our packaging. Travis Jakel did not make those
+choices and should not field questions about them.
 
 ## The one rule: stay deterministic
 
@@ -102,6 +130,15 @@ Features are permitted here — unlike in the okf-generator fork — but design 
 as generic capability rather than a Foodini special case wherever that is the
 better design. It usually is, and it keeps the code explicable to the next
 person.
+
+That has a consequence worth stating plainly: **a feature designed as generic
+capability is, almost by definition, one that belongs upstream.** If you find
+yourself building something genuinely general, propose it at
+[travisjakel/okf-ingest](https://github.com/travisjakel/okf-ingest) — its
+`CONTRIBUTING.md` asks for an issue before a large feature — and let it reach
+five bindings instead of one. Build it here when upstream declines it, when we
+need it sooner than that conversation can run, or when it is only meaningful
+inside Foodini's pipeline.
 
 ## Setup
 
