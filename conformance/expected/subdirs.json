@@ -1,0 +1,26 @@
+{
+  "_comment": "Added by Foodini 2026-08-22 for the --subdir defect: the flag was accepted and silently ignored for local directory sources. Scoping to a subtree must reduce the concept set AND leave out-of-subtree links tolerated as unresolved rather than crashing.",
+  "whole": {
+    "n_concepts": 3,
+    "conformant": true,
+    "links_total": 5,
+    "links_broken": 0,
+    "warnings": 0
+  },
+  "alpha": {
+    "n_concepts": 2,
+    "conformant": true,
+    "links_total": 4,
+    "links_broken": 1,
+    "broken_dst_raw": "../beta/b1.md",
+    "warnings": 1
+  },
+  "beta": {
+    "n_concepts": 1,
+    "conformant": true,
+    "links_total": 1,
+    "links_broken": 0,
+    "warnings": 0
+  },
+  "bad_subdir": "nosuchdir"
+}
