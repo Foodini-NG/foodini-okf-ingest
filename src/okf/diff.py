@@ -11,6 +11,10 @@ read_bundle(), a .duckdb catalog path, or an open duckdb connection — so
 outputs sorted by path: no model, no wall clock.
 
 Mirrors r/okf/R/okf_diff.R.
+
+Modified by Foodini 2026-08-23: annotated the one read that is deliberately
+catalog-wide (bundle discovery), now that every other read is bundle-scoped.
+Derived from okf-ingest by Travis Jakel (Apache-2.0) — see NOTICE.
 """
 from __future__ import annotations
 import os
@@ -24,7 +28,9 @@ from .okf import Bundle, read_bundle, links as _links
 def _state_from_con(con, bundle_id: Optional[str] = None) -> dict:
     if bundle_id is None:
         bids = [r[0] for r in con.execute(
-            "SELECT DISTINCT bundle_id FROM okf_concept").fetchall()]
+            # Deliberately catalog-wide: discovering which bundles a catalog holds
+        # is this function's job, and is the one read that must not be scoped.
+        "SELECT DISTINCT bundle_id FROM okf_concept").fetchall()]
         if len(bids) > 1:
             raise ValueError("catalog contains multiple bundles; pass a bundle_id")
         if not bids:

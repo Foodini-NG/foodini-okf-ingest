@@ -2,7 +2,7 @@
 """okf — command-line interface (Python).
 
 Modified by Foodini 2026-08-22/23: prog is `okf-ingest`, matching the console
-script; `validate` gains --subdir, so every
+script; every catalog-reading subcommand gains --bundle; `validate` gains --subdir, so every
 subcommand that takes a source now accepts it; and gains --summary plus
 severity/rule/path filters, so "is the hand-written layer clean?" is a
 first-class question rather than a shell pipeline. Derived from okf-ingest by
@@ -53,7 +53,7 @@ def _csv(v):
 def main(argv=None):
     try:
         return _main(argv)
-    except okf.SubdirNotFound as e:
+    except (okf.SubdirNotFound, okf.BundleScopeError) as e:
         print(e, file=sys.stderr)          # usage error, per the exit codes above
         return 2
 
@@ -88,6 +88,8 @@ def _main(argv=None):
     q = sub.add_parser("query"); q.add_argument("db")
     q.add_argument("--sql"); q.add_argument("--search")
     q.add_argument("--concepts", action="store_true"); q.add_argument("--links", action="store_true")
+    q.add_argument("--bundle", default=None,
+                   help="bundle_id to read; required if the catalog holds more than one")
     q.add_argument("--findings", action="store_true"); q.add_argument("--json", action="store_true")
 
     c = sub.add_parser("context"); c.add_argument("source")
@@ -97,41 +99,51 @@ def _main(argv=None):
     c.add_argument("--rank", default="bfs", choices=["bfs", "ppr"])
     c.add_argument("--query", default=None)
     c.add_argument("--subdir"); c.add_argument("--branch")
+    c.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one")
 
     h = sub.add_parser("html"); h.add_argument("source")
     h.add_argument("--out"); h.add_argument("--single")
     h.add_argument("--title"); h.add_argument("--subdir"); h.add_argument("--branch")
+    h.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one")
     h.add_argument("--json", action="store_true")
 
     gr = sub.add_parser("graph"); gr.add_argument("source")
     gr.add_argument("--out"); gr.add_argument("--title")
     gr.add_argument("--subdir"); gr.add_argument("--branch")
+    gr.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one")
 
     ex = sub.add_parser("export"); ex.add_argument("source")
     ex.add_argument("--subdir"); ex.add_argument("--branch")
+    ex.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one")
     ex.add_argument("--json", action="store_true"); ex.add_argument("--mermaid", action="store_true")
 
     im = sub.add_parser("impact"); im.add_argument("source"); im.add_argument("concept")
-    im.add_argument("--subdir"); im.add_argument("--branch"); im.add_argument("--json", action="store_true")
+    im.add_argument("--subdir"); im.add_argument("--branch")
+    im.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one"); im.add_argument("--json", action="store_true")
 
     dr = sub.add_parser("doctor"); dr.add_argument("source")
     dr.add_argument("--strict", action="store_true"); dr.add_argument("--fix", action="store_true")
     dr.add_argument("--stale-days", type=int, default=None, dest="stale_days")
-    dr.add_argument("--subdir"); dr.add_argument("--branch"); dr.add_argument("--json", action="store_true")
+    dr.add_argument("--subdir"); dr.add_argument("--branch")
+    dr.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one"); dr.add_argument("--json", action="store_true")
 
     df = sub.add_parser("diff"); df.add_argument("a"); df.add_argument("b")
     df.add_argument("--json", action="store_true")
 
     rk = sub.add_parser("rank"); rk.add_argument("source"); rk.add_argument("concept")
     rk.add_argument("-k", type=int, default=20)
-    rk.add_argument("--subdir"); rk.add_argument("--branch"); rk.add_argument("--json", action="store_true")
+    rk.add_argument("--subdir"); rk.add_argument("--branch")
+    rk.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one"); rk.add_argument("--json", action="store_true")
 
     e = sub.add_parser("embed"); e.add_argument("db")
     e.add_argument("--model", default="nomic-embed-text")
-    e.add_argument("--incremental", action="store_true"); e.add_argument("--json", action="store_true")
+    e.add_argument("--incremental", action="store_true")
+    e.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one")
+    e.add_argument("--json", action="store_true")
 
     r = sub.add_parser("rag"); r.add_argument("db"); r.add_argument("--query", required=True)
     r.add_argument("-k", type=int, default=5); r.add_argument("--model", default="nomic-embed-text")
+    r.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one")
     r.add_argument("--json", action="store_true")
 
     a = p.parse_args(argv)
@@ -215,17 +227,28 @@ def _main(argv=None):
     if a.cmd == "query":
         con = duckdb.connect(a.db, read_only=True)
         try:
+            # --sql is passed through verbatim: it is the escape hatch, and the
+            # caller owns any scoping it needs. The canned queries are scoped.
             if a.sql:
                 cur = con.execute(a.sql)
-            elif a.search:
-                cur = con.execute("SELECT path,type,title FROM okf_concept WHERE body ILIKE ? ORDER BY path",
-                                  [f"%{a.search}%"])
-            elif a.links:
-                cur = con.execute("SELECT * FROM okf_link")
-            elif a.findings:
-                cur = con.execute("SELECT * FROM okf_validation ORDER BY severity, path")
             else:
-                cur = con.execute("SELECT path,reserved,type,title FROM okf_concept ORDER BY path")
+                bid = okf.resolve_bundle(con, a.bundle)
+                if a.search:
+                    cur = con.execute(
+                        "SELECT path,type,title FROM okf_concept "
+                        "WHERE bundle_id = ? AND body ILIKE ? ORDER BY path",
+                        [bid, f"%{a.search}%"])
+                elif a.links:
+                    cur = con.execute(
+                        "SELECT * FROM okf_link WHERE bundle_id = ?", [bid])
+                elif a.findings:
+                    cur = con.execute(
+                        "SELECT * FROM okf_validation WHERE bundle_id = ? "
+                        "ORDER BY severity, path", [bid])
+                else:
+                    cur = con.execute(
+                        "SELECT path,reserved,type,title FROM okf_concept "
+                        "WHERE bundle_id = ? ORDER BY path", [bid])
             cols = [d[0] for d in cur.description]
             _print(cur.fetchall(), cols, a.json)
         finally:
@@ -241,7 +264,7 @@ def _main(argv=None):
         try:
             ctx = okf.context(con, start=a.start, depth=a.depth,
                               max_tokens=a.max_tokens, include_index=not a.no_index,
-                              rank=a.rank, query=a.query)
+                              rank=a.rank, query=a.query, bundle_id=a.bundle)
         finally:
             close()
         sys.stdout.write(ctx["text"])
@@ -260,7 +283,8 @@ def _main(argv=None):
         if not out:
             print("html: need --out <dir> or --single <file.html>"); con.close(); return 2
         try:
-            r = render_html(con, out, single=single, site_title=a.title)
+            r = render_html(con, out, single=single, site_title=a.title,
+                            bundle_id=a.bundle)
         finally:
             con.close()
         if a.json:
@@ -273,7 +297,7 @@ def _main(argv=None):
             print("graph: need --out <file.html>"); return 2
         con = _open(a.source, a.subdir, a.branch)
         try:
-            graph_html(con, a.out, site_title=a.title)
+            graph_html(con, a.out, site_title=a.title, bundle_id=a.bundle)
         finally:
             con.close()
         return 0
@@ -282,7 +306,8 @@ def _main(argv=None):
         from okf.graph import graph_json, graph_mermaid
         con = _open(a.source, a.subdir, a.branch)
         try:
-            sys.stdout.write((graph_mermaid(con) if a.mermaid else graph_json(con)) + "\n")
+            sys.stdout.write((graph_mermaid(con, bundle_id=a.bundle) if a.mermaid
+                              else graph_json(con, bundle_id=a.bundle)) + "\n")
         finally:
             con.close()
         return 0
@@ -291,7 +316,7 @@ def _main(argv=None):
         from okf.graph import impact
         con = _open(a.source, a.subdir, a.branch)
         try:
-            im = impact(con, a.concept)
+            im = impact(con, a.concept, bundle_id=a.bundle)
         finally:
             con.close()
         if a.json:
@@ -317,7 +342,7 @@ def _main(argv=None):
         con = _open(a.source, a.subdir, a.branch)
         try:
             now = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if a.stale_days else None
-            rep = doctor(con, now=now, stale_days=a.stale_days)
+            rep = doctor(con, now=now, stale_days=a.stale_days, bundle_id=a.bundle)
         finally:
             con.close()
         if a.json:
@@ -333,7 +358,7 @@ def _main(argv=None):
         from okf.graph import ppr
         con = _open(a.source, a.subdir, a.branch)
         try:
-            rows = ppr(con, a.concept, k=a.k)
+            rows = ppr(con, a.concept, k=a.k, bundle_id=a.bundle)
         finally:
             con.close()
         if a.json:
@@ -381,7 +406,8 @@ def _main(argv=None):
     if a.cmd == "embed":
         con = duckdb.connect(a.db)
         try:
-            n = rag_embed(con, embedder=ollama_embedder(a.model), incremental=a.incremental)
+            n = rag_embed(con, embedder=ollama_embedder(a.model),
+                          incremental=a.incremental, bundle_id=a.bundle)
         finally:
             con.close()
         print(json.dumps({"db": a.db, "chunks": n}) if a.json else f"embedded {n} chunks into {a.db}")
@@ -390,7 +416,8 @@ def _main(argv=None):
     if a.cmd == "rag":
         con = duckdb.connect(a.db, read_only=True)
         try:
-            rows = rag_search(con, a.query, embedder=ollama_embedder(a.model), k=a.k)
+            rows = rag_search(con, a.query, embedder=ollama_embedder(a.model), k=a.k,
+                              bundle_id=a.bundle)
         finally:
             con.close()
         if a.json:

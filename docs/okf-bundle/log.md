@@ -43,3 +43,15 @@ tags: [log]
   Filters change what is *reported*, never what conformance is judged on:
   `conformant` and the error count are always computed over every finding, and a
   filtered run states how many it suppressed.
+- **2026-08-23** Catalog reads are scoped to one bundle. The schema was always
+  multi-bundle (`okf_concept` is keyed by `(bundle_id, path)`) but 28 of 31 reads
+  omitted the predicate, so any catalog holding two bundles silently mixed them —
+  and since concept paths collide across bundles, the mixed answer looked
+  plausible. `resolve_bundle` now decides: explicit `bundle_id` wins, otherwise
+  the single bundle, otherwise the read is refused with the candidates named.
+  `--bundle` on every subcommand that reads a catalog. Two `okf_chunk` DELETEs in
+  the embed path were also unscoped, so re-embedding one bundle could delete
+  another's rows — destructive, not merely wrong. Guarded two ways: a `twobundles`
+  conformance fixture with a colliding path, and a static check
+  (`conformance/check_scoping.py`) that fails on any unscoped statement without a
+  stated exception.
