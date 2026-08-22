@@ -1,3 +1,7 @@
+# Modified by Foodini 2026-08-22: reduced from five per-language jobs (python,
+# rust, cpp, matlab, R CMD check) to the Python job alone, on 3.14, and the
+# console script renamed from `okf` to `okf-ingest`. Derived from okf-ingest by
+# Travis Jakel (Apache-2.0) — see NOTICE.
 name: CI
 
 on:
@@ -11,136 +15,41 @@ permissions:
 
 jobs:
   python:
-    name: python (${{ matrix.python-version }})
+    name: python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        python-version: ["3.14"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          version: "0.11.17"
       - name: Install package
-        run: pip install ./py[html]
-      - name: Conformance suite (Python)
+        run: uv pip install --system -e ".[html]"
+      - name: Conformance suite
         run: python conformance/check_py.py
       - name: CLI smoke
         run: |
-          okf validate conformance/bundles/store
-          okf ingest conformance/bundles/store --db /tmp/kb.duckdb
-          okf query /tmp/kb.duckdb --search revenue
-          okf html conformance/bundles/store --out /tmp/site --json
-          okf html conformance/bundles/store --single /tmp/bundle.html
+          okf-ingest validate conformance/bundles/store
+          okf-ingest ingest conformance/bundles/store --db /tmp/kb.duckdb
+          okf-ingest query /tmp/kb.duckdb --search revenue
+          okf-ingest html conformance/bundles/store --out /tmp/site --json
+          okf-ingest html conformance/bundles/store --single /tmp/bundle.html
           test -f /tmp/site/index.html && test -f /tmp/site/metrics/revenue.html && test -f /tmp/bundle.html
           grep -q 'href="../orders.html"' /tmp/site/metrics/revenue.html
           grep -q 'Linked from:' /tmp/site/orders.html
-          okf graph conformance/bundles/store --out /tmp/graph.html && test -f /tmp/graph.html
-          okf export conformance/bundles/store | python -c "import sys,json; d=json.load(sys.stdin); assert d['nodes'] and d['edges']"
-          okf impact conformance/bundles/store orders.md | grep 'inbound' >/dev/null
-          okf ingest conformance/bundles/store --db /tmp/inc.duckdb >/dev/null
-          okf ingest conformance/bundles/store --db /tmp/inc.duckdb --incremental --json | grep '"cached"' >/dev/null
-          okf export conformance/bundles/store --mermaid | grep 'graph LR' >/dev/null
-          okf doctor conformance/bundles/store | grep 'health:' >/dev/null
-          okf diff conformance/bundles/diff_a conformance/bundles/diff_a | grep 'identical' >/dev/null
-          okf rank conformance/bundles/store orders.md | grep 'customers.md' >/dev/null
-          okf context conformance/bundles/store --query 'revenue orders' 2>/dev/null | grep 'Revenue' >/dev/null
-          okf validate docs/okf-bundle --strict      # dogfood bundle stays conformant
-          okf doctor docs/okf-bundle --strict         # …and healthy (100/100)
-
-  rust:
-    name: rust (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    defaults:
-      run:
-        working-directory: rust/okf-ingest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust/okf-ingest
-      - name: Format
-        run: cargo fmt --check
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Tests + conformance + dogfood
-        run: cargo test
-
-  cpp:
-    name: cpp (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure
-        run: cmake -S cpp -B cpp/build -DCMAKE_BUILD_TYPE=Release
-      - name: Build
-        run: cmake --build cpp/build --config Release
-      - name: Conformance + dogfood (ctest)
-        run: ctest --test-dir cpp/build --output-on-failure -C Release
-
-  matlab:
-    name: matlab
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: matlab-actions/setup-matlab@v2
-      - name: Conformance suite (MATLAB)
-        uses: matlab-actions/run-command@v2
-        with:
-          command: run('conformance/check_matlab.m')
-
-  R-CMD-check:
-    name: R CMD check (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    env:
-      R_KEEP_PKG_SOURCE: yes
-    steps:
-      - uses: actions/checkout@v4
-      - uses: r-lib/actions/setup-r@v2
-        with:
-          use-public-rspm: true
-      - uses: r-lib/actions/setup-r-dependencies@v2
-        with:
-          working-directory: r/okf
-          extra-packages: any::rcmdcheck
-      - uses: r-lib/actions/check-r-package@v2
-        with:
-          working-directory: r/okf
-          upload-snapshots: true
-      - name: Conformance suite (R)
-        run: Rscript conformance/check_r.R
-        shell: bash
-      - name: html + graph smoke (R)
-        run: |
-          Rscript r/okf/bin/okf.R html conformance/bundles/store --out site_r
-          test -f site_r/index.html && test -f site_r/metrics/revenue.html
-          grep -q 'href="../orders.html"' site_r/metrics/revenue.html
-          grep -q 'Linked from:' site_r/orders.html
-          Rscript r/okf/bin/okf.R graph conformance/bundles/store --out graph_r.html && test -f graph_r.html
-          Rscript r/okf/bin/okf.R impact conformance/bundles/store orders.md | grep inbound >/dev/null
-          Rscript r/okf/bin/okf.R ingest conformance/bundles/store --db inc_r.duckdb >/dev/null
-          Rscript r/okf/bin/okf.R ingest conformance/bundles/store --db inc_r.duckdb --incremental | grep incremental >/dev/null
-          Rscript r/okf/bin/okf.R export conformance/bundles/store --mermaid | grep 'graph LR' >/dev/null
-          Rscript r/okf/bin/okf.R doctor conformance/bundles/store | grep 'health:' >/dev/null
-          Rscript r/okf/bin/okf.R diff conformance/bundles/diff_a conformance/bundles/diff_a | grep 'identical' >/dev/null
-          Rscript r/okf/bin/okf.R rank conformance/bundles/store orders.md | grep 'customers.md' >/dev/null
-          Rscript r/okf/bin/okf.R context conformance/bundles/store --query 'revenue orders' 2>/dev/null | grep 'Revenue' >/dev/null
-          Rscript r/okf/bin/okf.R validate docs/okf-bundle --strict
-          Rscript r/okf/bin/okf.R doctor docs/okf-bundle --strict
-        shell: bash
+          okf-ingest graph conformance/bundles/store --out /tmp/graph.html && test -f /tmp/graph.html
+          okf-ingest export conformance/bundles/store | python -c "import sys,json; d=json.load(sys.stdin); assert d['nodes'] and d['edges']"
+          okf-ingest impact conformance/bundles/store orders.md | grep 'inbound' >/dev/null
+          okf-ingest ingest conformance/bundles/store --db /tmp/inc.duckdb >/dev/null
+          okf-ingest ingest conformance/bundles/store --db /tmp/inc.duckdb --incremental --json | grep '"cached"' >/dev/null
+          okf-ingest export conformance/bundles/store --mermaid | grep 'graph LR' >/dev/null
+          okf-ingest doctor conformance/bundles/store | grep 'health:' >/dev/null
+          okf-ingest diff conformance/bundles/diff_a conformance/bundles/diff_a | grep 'identical' >/dev/null
+          okf-ingest rank conformance/bundles/store orders.md | grep 'customers.md' >/dev/null
+          okf-ingest context conformance/bundles/store --query 'revenue orders' 2>/dev/null | grep 'Revenue' >/dev/null
+          okf-ingest validate docs/okf-bundle --strict      # dogfood bundle stays conformant
+          okf-ingest doctor docs/okf-bundle --strict         # …and healthy (100/100)
