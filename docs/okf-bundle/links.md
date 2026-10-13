@@ -35,4 +35,9 @@ finding, and `links_total` / `links_broken` count markdown links only. Among
 several matches the one nearest the importer wins (its own subtree before a
 sibling's), then the more specific one; an exact tie resolves to nothing. A
 `Dependency` concept is a manifest entry, not a module, and is never a target.
-The resolution is by path suffix and is deterministic.
+A standard-library module is never looked up, and a bare single-segment name
+(`import httpx`) crosses into another codebase only where it is a top-level
+package there (`httpx/__init__.md` exists and the directory above is not a
+package) — a codebase is the `git:repo:` tag when present, else the first path
+segment. Multi-segment names cross freely. The resolution is by path suffix
+and is deterministic.

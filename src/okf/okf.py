@@ -26,7 +26,7 @@ Public API:
     search(con, term)            -> rows
 """
 from __future__ import annotations
-import os, re, json, fnmatch, hashlib, datetime, tempfile, shutil, subprocess, tarfile, zipfile, urllib.request
+import os, re, sys, json, fnmatch, hashlib, datetime, tempfile, shutil, subprocess, tarfile, zipfile, urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
 import yaml
@@ -289,7 +289,8 @@ def extract_imports(body: str) -> list:
 
 
 def _import_targets(stmt: str) -> list:
-    """(label, [candidate path suffixes, most specific first]) per imported name.
+    """(label, module, [candidate path suffixes, most specific first]) per
+    imported name.
 
     `from a.b import x as y` -> a/b/x.md, a/b/__init__/x.md, then the module
     itself (a/b.md, a/b/__init__.md) when x is not a concept of its own, e.g. a
@@ -304,7 +305,7 @@ def _import_targets(stmt: str) -> list:
             mod = mod.strip().split(" as ")[0].strip()
             if mod and not mod.startswith("."):
                 d = mod.replace(".", "/")
-                out.append((f"import {mod}", [f"{d}.md", f"{d}/__init__.md"]))
+                out.append((f"import {mod}", mod, [f"{d}.md", f"{d}/__init__.md"]))
     elif kw == "from":
         mod, _, names = rest.partition(" import ")
         mod = mod.strip()
@@ -314,10 +315,19 @@ def _import_targets(stmt: str) -> list:
         for name in names.split(","):
             name = name.strip().split(" as ")[0].strip()
             if name and name != "*":
-                out.append((f"from {mod} import {name}",
+                out.append((f"from {mod} import {name}", mod,
                             [f"{d}/{name}.md", f"{d}/__init__/{name}.md",
                              f"{d}.md", f"{d}/__init__.md"]))
     return out
+
+
+def _codebase(c) -> str:
+    """Which codebase a concept belongs to: its `git:repo:<name>` tag when the
+    generator left one, else the first path segment."""
+    for t in (c.tags if isinstance(c.tags, list) else []):
+        if isinstance(t, str) and t.startswith("git:repo:"):
+            return t[len("git:repo:"):]
+    return c.path.split("/", 1)[0]
 
 
 def _nearest(src: str, cands: list) -> Optional[str]:
@@ -352,11 +362,24 @@ def import_links(b: Bundle) -> list:
     nothing. A `Dependency` concept is a manifest entry, not a module, so it is
     never a target — otherwise `import x` would land on any sibling's
     `_dependencies/.../x.md`.
+
+    Two more rules keep bare names honest, both checked against a real
+    multi-codebase bundle. A standard-library module (`uuid`, `os`) is never
+    looked up: some codebase will have a file of that name and it is never the
+    target. And a single-segment name (`import httpx`, `from pytest import x`)
+    may cross into another codebase only where it is a *top-level package*
+    there (`httpx/__init__.md` exists and the directory above is not itself a
+    package) — a bare module file nested somewhere, or a sub-package that
+    happens to be named `pydantic`, is not importable by that name from
+    outside, so a match on it is a coincidence. Multi-segment names (`a.b`)
+    carry their own evidence and cross freely.
     """
     # ponytail: suffix matching, no package->subtree map; add one if a name
     # shared by two sibling codebases ever needs to resolve.
     by_suffix: dict = {}
+    codebase = {}
     for c in b.concepts:
+        codebase[c.path] = _codebase(c)
         if c.type == "Dependency":
             continue
         parts = c.path.split("/")
@@ -366,9 +389,21 @@ def import_links(b: Bundle) -> list:
     for c in b.concepts:
         stmts = extract_imports(c.body) if "## Imports" in c.body else []
         for stmt in stmts:
-            for label, suffixes in _import_targets(stmt):
-                cands = [(rank, p) for rank, s in enumerate(suffixes)
-                         for p in by_suffix.get(s, ())]
+            for label, module, suffixes in _import_targets(stmt):
+                top = module.split(".", 1)[0]
+                if top in sys.stdlib_module_names:
+                    continue
+                single = "." not in module
+                cands = []
+                for rank, s in enumerate(suffixes):
+                    for p in by_suffix.get(s, ()):
+                        if single and codebase[p] != codebase[c.path]:
+                            root = f"{p[:len(p) - len(s)]}{top}"
+                            # a top-level package: has __init__, its parent does not
+                            if f"{root}/__init__.md" not in b.known or \
+                                    f"{os.path.dirname(root)}/__init__.md" in b.known:
+                                continue
+                        cands.append((rank, p))
                 dst = _nearest(c.path, cands) if cands else None
                 if dst is not None and dst != c.path:
                     out.append({"src_path": c.path, "dst_raw": label,
