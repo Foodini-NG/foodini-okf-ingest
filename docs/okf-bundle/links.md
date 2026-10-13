@@ -32,5 +32,7 @@ side gets edges between them, which a per-codebase call graph cannot provide.
 Only resolved edges are stored: an import of the standard library or of a
 package outside the bundle is not a broken link, so it is neither a row nor a
 finding, and `links_total` / `links_broken` count markdown links only. Among
-several matches the one nearest the importer wins; an exact tie resolves to
-nothing. The resolution is by path suffix and is deterministic.
+several matches the one nearest the importer wins (its own subtree before a
+sibling's), then the more specific one; an exact tie resolves to nothing. A
+`Dependency` concept is a manifest entry, not a module, and is never a target.
+The resolution is by path suffix and is deterministic.

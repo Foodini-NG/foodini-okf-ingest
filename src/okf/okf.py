@@ -321,8 +321,11 @@ def _import_targets(stmt: str) -> list:
 
 
 def _nearest(src: str, cands: list) -> Optional[str]:
-    """The candidate sharing the longest leading path with `src`; None on a tie.
-    Deterministic: ties are refused rather than broken by order."""
+    """`cands` is [(rank, path)], rank 0 = most specific suffix. The candidate
+    sharing the longest leading path with `src` wins, then the more specific
+    one; an exact tie on both is refused rather than broken by order. Proximity
+    first, because the importer's own subtree holding the *module* is stronger
+    evidence than a sibling subtree holding a same-named *symbol*."""
     a = src.split("/")
     def common(p):
         b = p.split("/")
@@ -330,10 +333,10 @@ def _nearest(src: str, cands: list) -> Optional[str]:
         while n < min(len(a), len(b)) and a[n] == b[n]:
             n += 1
         return n
-    ranked = sorted(cands, key=lambda p: (-common(p), p))
-    if len(ranked) > 1 and common(ranked[0]) == common(ranked[1]):
+    ranked = sorted(cands, key=lambda rp: (-common(rp[1]), rp[0], rp[1]))
+    if len(ranked) > 1 and (common(ranked[0][1]), ranked[0][0]) == (common(ranked[1][1]), ranked[1][0]):
         return None
-    return ranked[0]
+    return ranked[0][1]
 
 
 def import_links(b: Bundle) -> list:
@@ -345,28 +348,31 @@ def import_links(b: Bundle) -> list:
     Only resolved edges are returned. An import of the standard library or of
     a package outside the bundle is not a broken link: not a finding, not a
     row. Among several matches the one closest to the importer wins (its own
-    subtree before a sibling's); a tie resolves to nothing.
+    subtree before a sibling's), then the more specific; a tie resolves to
+    nothing. A `Dependency` concept is a manifest entry, not a module, so it is
+    never a target — otherwise `import x` would land on any sibling's
+    `_dependencies/.../x.md`.
     """
     # ponytail: suffix matching, no package->subtree map; add one if a name
     # shared by two sibling codebases ever needs to resolve.
     by_suffix: dict = {}
-    for p in b.known:
-        parts = p.split("/")
+    for c in b.concepts:
+        if c.type == "Dependency":
+            continue
+        parts = c.path.split("/")
         for i in range(len(parts)):
-            by_suffix.setdefault("/".join(parts[i:]), []).append(p)
+            by_suffix.setdefault("/".join(parts[i:]), []).append(c.path)
     out = []
     for c in b.concepts:
         stmts = extract_imports(c.body) if "## Imports" in c.body else []
         for stmt in stmts:
             for label, suffixes in _import_targets(stmt):
-                for s in suffixes:
-                    cands = by_suffix.get(s)
-                    if cands:
-                        dst = _nearest(c.path, cands)
-                        if dst is not None and dst != c.path:
-                            out.append({"src_path": c.path, "dst_raw": label,
-                                        "dst_path": dst, "resolved": True})
-                        break
+                cands = [(rank, p) for rank, s in enumerate(suffixes)
+                         for p in by_suffix.get(s, ())]
+                dst = _nearest(c.path, cands) if cands else None
+                if dst is not None and dst != c.path:
+                    out.append({"src_path": c.path, "dst_raw": label,
+                                "dst_path": dst, "resolved": True})
     return out
 
 
