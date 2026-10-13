@@ -1,0 +1,13 @@
+{
+  "_note": "Added by Foodini 2026-10-13. `## Imports` bullets become resolved okf_link rows; markdown-link counts are untouched by them. Of app-b/src/main.md's six statements: `import os` is outside the bundle (no row, no finding); `slugify` resolves to the Function page and `VERSION`, which has no page of its own, falls back to the module; `import toolkit` hits the package's __init__ page; `src.common.helper` exists in both app-b and lib-a and the importer's own subtree wins; `shared.thing` exists in lib-a and lib-c at equal distance, so the tie resolves to nothing; the relative import yields nothing.",
+  "bundle": { "n_concepts": 8, "conformant": true, "errors": 0, "warnings": 0 },
+  "links": { "total": 8, "broken": 0 },
+  "import_links": 4,
+  "import_rows": [
+    ["app-b/src/main.md", "from src.common import helper", "app-b/src/common/helper.md"],
+    ["app-b/src/main.md", "from toolkit.util import VERSION", "lib-a/src/toolkit/util.md"],
+    ["app-b/src/main.md", "from toolkit.util import slugify", "lib-a/src/toolkit/util/slugify.md"],
+    ["app-b/src/main.md", "import toolkit", "lib-a/src/toolkit/__init__.md"]
+  ],
+  "slugify_inbound": ["app-b/src/main.md", "index.md"]
+}

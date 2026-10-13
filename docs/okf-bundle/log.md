@@ -8,6 +8,15 @@ tags: [log]
 
 # Change log
 
+- **2026-10-13** Import statements become edges. A `## Imports` section (as
+  okf-generator renders one) is resolved name by name to the concept whose path
+  ends with the dotted module path, and stored in `okf_link` as a resolved edge
+  with the statement as `dst_raw`. A bundle holding several codebases side by
+  side thereby gets cross-codebase edges, which the generator's per-codebase
+  call graph never produced. Outside-the-bundle imports are neither rows nor
+  findings; markdown-link counts are unchanged; ties resolve to nothing. The
+  `ingest` summary gains `import_links`. Pinned by the `imports` conformance
+  fixture.
 - **2026-06-23** Creation — okf-ingest documents itself as an OKF bundle
   (dogfood): determinism, the OKF format, catalog, conformance, bindings,
   sources, validate, the concept graph, query, context, cli, install, render,

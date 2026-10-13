@@ -261,6 +261,28 @@ got_qr = [{"path": x["path"], "score": round(x["score"], 8)}
 check("query.ranking", got_qr, expq["ranking"])
 conq.close()
 
+# --- imports: `## Imports` bullets become resolved edges, by path suffix ---
+# Added by Foodini 2026-10-13. The generator's call graph never crosses a
+# codebase; a bundle holding several side by side had no edge between them.
+# Markdown-link counts must not move, outside-the-bundle imports must produce
+# neither a row nor a finding, and a tie must resolve to nothing.
+expi = json.load(open(os.path.join(HERE, "expected", "imports.json")))
+coni, si = okf.ingest(os.path.join(HERE, "bundles", "imports"))
+for _k, _v in expi["bundle"].items():
+    check(f"imports.{_k}", si[_k], _v)
+check("imports.links_total", si["links_total"], expi["links"]["total"])
+check("imports.links_broken", si["links_broken"], expi["links"]["broken"])
+check("imports.import_links", si["import_links"], expi["import_links"])
+_rows = [list(r) for r in coni.execute(
+    "SELECT src_path, dst_raw, dst_path FROM okf_link WHERE resolved "
+    "AND (dst_raw LIKE 'import %' OR dst_raw LIKE 'from %') ORDER BY 1, 2").fetchall()]
+check("imports.rows", _rows, expi["import_rows"])
+check("imports.unresolved_rows",        # no row for os / shared.thing / .local
+      coni.execute("SELECT count(*) FROM okf_link WHERE NOT resolved").fetchone()[0], 0)
+check("imports.backlinks_see_them",     # the graph helpers read the same table
+      okf_backlinks(coni, "lib-a/src/toolkit/util/slugify.md"), expi["slugify_inbound"])
+coni.close()
+
 # --- diff (deterministic concept-level changelog between two bundle states) ---
 from okf.diff import diff as okf_diff  # noqa: E402
 dd = okf_diff(os.path.join(HERE, "bundles", "diff_a"), os.path.join(HERE, "bundles", "diff_b"))

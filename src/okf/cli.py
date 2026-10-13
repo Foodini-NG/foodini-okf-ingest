@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """okf — command-line interface (Python).
 
-Modified by Foodini 2026-08-22/23: prog is `okf-ingest`, matching the console
+Modified by Foodini 2026-08-22/23 (2026-10-13: ingest reports import edges): prog is `okf-ingest`, matching the console
 script; every catalog-reading subcommand gains --bundle; `validate` gains --subdir, so every
 subcommand that takes a source now accepts it; and gains --summary plus
 severity/rule/path filters, so "is the hand-written layer clean?" is a
@@ -218,7 +218,8 @@ def _main(argv=None):
         else:
             print(f"ingested {a.bundle} -> {a.db}\n  concepts={s['n_concepts']} "
                   f"conformant={s['n_conformant']} ({s['conformant']}) errors={s['errors']} "
-                  f"warnings={s['warnings']} links={s['links_total']} broken={s['links_broken']}")
+                  f"warnings={s['warnings']} links={s['links_total']} broken={s['links_broken']} "
+                  f"imports={s['import_links']}")
             if "changed" in s:
                 print(f"  incremental: changed={s['changed']} added={s['added']} "
                       f"removed={s['removed']} cached={s['cached']}")
