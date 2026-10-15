@@ -1,16 +1,14 @@
 {
-  "_comment": "Added by Foodini 2026-08-23 for bundle scoping. Two bundles in ONE catalog with a colliding path (shared.md in both). Before scoping, 28 of 31 catalog reads omitted bundle_id, so every consume path silently mixed the two \u2014 and because paths collide the result looked plausible. Bundle ids are sha1 of the ingested path, so they cannot be pinned here; assertions key off the root basename instead. only-<x>.md also links to shared.md, so inbound differs per bundle - otherwise DISTINCT collapses the collision and an unscoped read is right by accident.",
+  "_comment": "Added by Foodini 2026-08-23 for bundle scoping. Two bundles in ONE catalog with a colliding path (shared.md in both). Before scoping, 28 of 31 catalog reads omitted bundle_id, so every consume path silently mixed the two \u2014 and because paths collide the result looked plausible. Bundle ids are sha1 of the ingested path, so they cannot be pinned here; assertions key off the root basename instead. only-<x>.md also links to shared.md, so inbound differs per bundle - otherwise DISTINCT collapses the collision and an unscoped read is right by accident. 2026-10-15: shared_inbound no longer lists index.md - backlinks() follows DEFAULT_KINDS, which leaves directory-index navigation out; the impact check passes kinds=DEFAULT_KINDS so it still equals backlinks.",
   "bundles": 2,
   "per_bundle": {
     "n_concepts": 2,
     "graph_nodes": 3,
     "shared_inbound": {
       "a": [
-        "index.md",
         "only-a.md"
       ],
       "b": [
-        "index.md",
         "only-b.md"
       ]
     },

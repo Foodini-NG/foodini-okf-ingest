@@ -19,6 +19,23 @@ via reproducible label propagation). The same graph drives [rendering](render.md
 primitive. No relationships are inferred ([determinism](determinism.md)); only
 the links you wrote.
 
+## Edge kinds
+
+Every `okf_link` row carries a `kind`. A link inside a generator
+Relationships-table row (first cell `calls`, `called_by` or `related`, second
+cell the link) takes that row's type —
+`calls` or `related` (`related (AI)` folds into `related`); a `called_by` row is
+the reverse of a `calls` row on the other page and is **not stored**, which is
+what kept the undirected union from meaning anything. A plain link is `link`,
+or `index` when it sits in a directory `index.md`; an import statement is
+`import`.
+
+`backlinks` and `context` follow `DEFAULT_KINDS` (everything but `index`);
+`impact` follows `CODE_KINDS` (`calls` + `import`) in reverse, which is what a
+change can actually hit. Both take `kinds` and `include_tests`; test pages
+(recognised by path: `tests/`, `test_*`, `*.test.*`, `*.spec.*`) are dropped by
+default. An existing catalog gains the column on its next ingest.
+
 ## Import edges
 
 A concept may list import statements under a `## Imports` heading, one per

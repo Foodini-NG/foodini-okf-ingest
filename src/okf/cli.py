@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """okf — command-line interface (Python).
 
-Modified by Foodini 2026-08-22/23 (2026-10-13: ingest reports import edges): prog is `okf-ingest`, matching the console
+Modified by Foodini 2026-08-22/23 (2026-10-13: ingest reports import edges; 2026-10-15: --kinds/--tests on context and impact): prog is `okf-ingest`, matching the console
 script; every catalog-reading subcommand gains --bundle; `validate` gains --subdir, so every
 subcommand that takes a source now accepts it; and gains --summary plus
 severity/rule/path filters, so "is the hand-written layer clean?" is a
@@ -98,6 +98,8 @@ def _main(argv=None):
     c.add_argument("--no-index", action="store_true")
     c.add_argument("--rank", default="bfs", choices=["bfs", "ppr"])
     c.add_argument("--query", default=None)
+    c.add_argument("--kinds", default=None, help="edge kinds to follow, comma-separated (default: link,related,calls,import)")
+    c.add_argument("--tests", action="store_true", help="include test pages (dropped by default)")
     c.add_argument("--subdir"); c.add_argument("--branch")
     c.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one")
 
@@ -118,6 +120,8 @@ def _main(argv=None):
     ex.add_argument("--json", action="store_true"); ex.add_argument("--mermaid", action="store_true")
 
     im = sub.add_parser("impact"); im.add_argument("source"); im.add_argument("concept")
+    im.add_argument("--kinds", default=None, help="edge kinds to follow, comma-separated (default: calls,import)")
+    im.add_argument("--tests", action="store_true", help="include test pages (dropped by default)")
     im.add_argument("--subdir"); im.add_argument("--branch")
     im.add_argument("--bundle", default=None, help="bundle_id to read; required if the catalog holds more than one"); im.add_argument("--json", action="store_true")
 
@@ -265,7 +269,9 @@ def _main(argv=None):
         try:
             ctx = okf.context(con, start=a.start, depth=a.depth,
                               max_tokens=a.max_tokens, include_index=not a.no_index,
-                              rank=a.rank, query=a.query, bundle_id=a.bundle)
+                              rank=a.rank, query=a.query, bundle_id=a.bundle,
+                              kinds=a.kinds.split(",") if a.kinds else None,
+                              include_tests=a.tests)
         finally:
             close()
         sys.stdout.write(ctx["text"])
@@ -317,7 +323,9 @@ def _main(argv=None):
         from okf.graph import impact
         con = _open(a.source, a.subdir, a.branch)
         try:
-            im = impact(con, a.concept, bundle_id=a.bundle)
+            im = impact(con, a.concept, bundle_id=a.bundle,
+                        kinds=a.kinds.split(",") if a.kinds else okf.CODE_KINDS,
+                        include_tests=a.tests)
         finally:
             con.close()
         if a.json:

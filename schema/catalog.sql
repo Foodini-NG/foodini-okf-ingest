@@ -36,12 +36,16 @@ CREATE TABLE IF NOT EXISTS okf_concept (
   PRIMARY KEY (bundle_id, path)
 );
 
--- Concept graph: one row per markdown link. Untyped directed edges (OKF §4).
+-- Concept graph: one row per markdown link or import statement, directed, with a
+-- kind: link | related | calls | import | index. A Relationships-table row names
+-- its kind; `called_by` rows are the reverse of `calls` and are never stored.
+-- An existing catalog gains the column on its next ingest (ALTER ... IF NOT EXISTS).
 CREATE TABLE IF NOT EXISTS okf_link (
   bundle_id  TEXT,
   src_path   TEXT,                 -- concept that contains the link
   dst_raw    TEXT,                 -- link target exactly as written
   dst_path   TEXT,                 -- resolved bundle-relative path (NULL if unresolved)
+  kind       TEXT,                 -- link | related | calls | import | index
   resolved   BOOLEAN               -- spec: consumers MUST tolerate broken links
 );
 
