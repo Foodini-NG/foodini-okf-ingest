@@ -223,7 +223,7 @@ def _main(argv=None):
             print(f"ingested {a.bundle} -> {a.db}\n  concepts={s['n_concepts']} "
                   f"conformant={s['n_conformant']} ({s['conformant']}) errors={s['errors']} "
                   f"warnings={s['warnings']} links={s['links_total']} broken={s['links_broken']} "
-                  f"imports={s['import_links']}")
+                  f"imports={s['import_links']} calls={s['call_links']}")
             if "changed" in s:
                 print(f"  incremental: changed={s['changed']} added={s['added']} "
                       f"removed={s['removed']} cached={s['cached']}")

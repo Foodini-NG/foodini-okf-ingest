@@ -324,6 +324,26 @@ check("kinds.migration_fills_column",
       _mc.execute("SELECT count(*) FROM okf_link WHERE kind IS NULL").fetchone()[0], 0)
 _mc.close()
 
+# --- calls: unresolved callees resolve through the module's imports; TS specifiers ---
+# Added by Foodini 2026-10-15. The generator's call graph never leaves one
+# codebase; with the module's imports a callee it could not pin becomes a
+# cross-codebase `calls` edge, so impact on a shared symbol sees its callers.
+expc = json.load(open(os.path.join(HERE, "expected", "calls.json")))
+conc, sc = okf.ingest(os.path.join(HERE, "bundles", "calls"))
+for _k in ("links_total", "import_links", "call_links"):
+    check(f"calls.{_k}", sc[_k], expc[_k])
+check("calls.rows", [list(r) for r in conc.execute(
+    "SELECT src_path, dst_raw, dst_path FROM okf_link WHERE kind = 'calls' ORDER BY 1, 2").fetchall()],
+      expc["call_rows"])
+check("calls.ts_import_rows", [list(r) for r in conc.execute(
+    "SELECT src_path, dst_raw, dst_path FROM okf_link WHERE kind = 'import' "
+    "AND src_path LIKE 'web-c/%' ORDER BY 1, 2").fetchall()], expc["ts_import_rows"])
+check("calls.no_stdlib_or_unbound_rows",
+      conc.execute("SELECT count(*) FROM okf_link WHERE dst_raw IN ('os.path.join', 'self.repo.save')").fetchone()[0], 0)
+check("calls.slugify_impact_inbound",
+      okf_impact(conc, "lib-a/src/toolkit/util/slugify.md")["inbound"], expc["slugify_impact_inbound"])
+conc.close()
+
 # --- diff (deterministic concept-level changelog between two bundle states) ---
 from okf.diff import diff as okf_diff  # noqa: E402
 dd = okf_diff(os.path.join(HERE, "bundles", "diff_a"), os.path.join(HERE, "bundles", "diff_b"))
