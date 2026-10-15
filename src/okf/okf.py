@@ -5,8 +5,10 @@ sources, via a single bundle-root resolution path shared by every source
 kind; catalog writes are batched into multi-row INSERT ... VALUES statements
 instead of one execute() per row; and findings can be filtered and
 summarised (filter_findings / summarize_findings); and catalog reads are
-scoped to one bundle (resolve_bundle). Derived from okf-ingest by Travis Jakel
-(Apache-2.0) — see NOTICE.
+scoped to one bundle (resolve_bundle). 2026-10-13: import statements listed
+under a `## Imports` heading become resolved edges in okf_link (import_links),
+so a bundle holding several codebases gets cross-codebase edges. Derived from
+okf-ingest by Travis Jakel (Apache-2.0) — see NOTICE.
 
 Writes a catalog against schema/catalog.sql, the interop contract, so a bundle
 ingested here yields a catalog any conformant implementation can read — including
@@ -19,11 +21,12 @@ Public API:
     filter_findings(findings, ...) -> list[Finding]
     summarize_findings(findings) -> dict (counts by severity / rule / path prefix)
     links(bundle)                -> list[Link]
+    import_links(bundle)         -> list[Link] (resolved only, from `## Imports` sections)
     ingest(root, db_path)        -> (duckdb.Connection, summary dict)
     search(con, term)            -> rows
 """
 from __future__ import annotations
-import os, re, json, fnmatch, hashlib, datetime, tempfile, shutil, subprocess, tarfile, zipfile, urllib.request
+import os, re, sys, json, fnmatch, hashlib, datetime, tempfile, shutil, subprocess, tarfile, zipfile, urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Optional
 import yaml
@@ -47,6 +50,8 @@ _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 _LINK = re.compile(r"\]\(\s*([^)\s]+)")
 _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 _SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
+_IMPORTS_SECTION = re.compile(r"^## Imports\s*$(.*?)(?=^## |\Z)", re.M | re.S)
+_IMPORT_LINE = re.compile(r"^- `(import|from) ([^`]+)`\s*$", re.M)
 
 # Mirror of schema/catalog.sql (that file is canonical; keep in sync).
 SCHEMA = """
@@ -271,6 +276,138 @@ def links(b: Bundle) -> list:
             dst = resolve_wiki(raw, idx, b.known)
             out.append({"src_path": c.path, "dst_raw": raw,
                         "dst_path": dst, "resolved": dst is not None})
+    return out
+
+
+def extract_imports(body: str) -> list:
+    """Statements listed under a `## Imports` heading, one per bullet, as
+    okf-generator renders them: `- \\`from a.b import x, y\\``."""
+    m = _IMPORTS_SECTION.search(body)
+    if not m:
+        return []
+    return [f"{kw} {rest.strip()}" for kw, rest in _IMPORT_LINE.findall(m.group(1))]
+
+
+def _import_targets(stmt: str) -> list:
+    """(label, module, [candidate path suffixes, most specific first]) per
+    imported name.
+
+    `from a.b import x as y` -> a/b/x.md, a/b/__init__/x.md, then the module
+    itself (a/b.md, a/b/__init__.md) when x is not a concept of its own, e.g. a
+    constant. `import a.b` -> a/b.md, a/b/__init__.md. Relative imports yield
+    nothing: they never leave their own subtree, and the generator's call graph
+    already covers that."""
+    kw, _, rest = stmt.partition(" ")
+    rest = rest.split("#", 1)[0].strip().strip("()")
+    out = []
+    if kw == "import":
+        for mod in rest.split(","):
+            mod = mod.strip().split(" as ")[0].strip()
+            if mod and not mod.startswith("."):
+                d = mod.replace(".", "/")
+                out.append((f"import {mod}", mod, [f"{d}.md", f"{d}/__init__.md"]))
+    elif kw == "from":
+        mod, _, names = rest.partition(" import ")
+        mod = mod.strip()
+        if mod.startswith(".") or not names:
+            return []
+        d = mod.replace(".", "/")
+        for name in names.split(","):
+            name = name.strip().split(" as ")[0].strip()
+            if name and name != "*":
+                out.append((f"from {mod} import {name}", mod,
+                            [f"{d}/{name}.md", f"{d}/__init__/{name}.md",
+                             f"{d}.md", f"{d}/__init__.md"]))
+    return out
+
+
+def _codebase(c) -> str:
+    """Which codebase a concept belongs to: its `git:repo:<name>` tag when the
+    generator left one, else the first path segment."""
+    for t in (c.tags if isinstance(c.tags, list) else []):
+        if isinstance(t, str) and t.startswith("git:repo:"):
+            return t[len("git:repo:"):]
+    return c.path.split("/", 1)[0]
+
+
+def _nearest(src: str, cands: list) -> Optional[str]:
+    """`cands` is [(rank, path)], rank 0 = most specific suffix. The candidate
+    sharing the longest leading path with `src` wins, then the more specific
+    one; an exact tie on both is refused rather than broken by order. Proximity
+    first, because the importer's own subtree holding the *module* is stronger
+    evidence than a sibling subtree holding a same-named *symbol*."""
+    a = src.split("/")
+    def common(p):
+        b = p.split("/")
+        n = 0
+        while n < min(len(a), len(b)) and a[n] == b[n]:
+            n += 1
+        return n
+    ranked = sorted(cands, key=lambda rp: (-common(rp[1]), rp[0], rp[1]))
+    if len(ranked) > 1 and (common(ranked[0][1]), ranked[0][0]) == (common(ranked[1][1]), ranked[1][0]):
+        return None
+    return ranked[0][1]
+
+
+def import_links(b: Bundle) -> list:
+    """Edges from `## Imports` sections. Each imported name is resolved to the
+    concept whose path ends with the dotted module path (see _import_targets),
+    so a bundle that holds several codebases side by side gets edges between
+    them — the generator's own call graph never leaves one codebase.
+
+    Only resolved edges are returned. An import of the standard library or of
+    a package outside the bundle is not a broken link: not a finding, not a
+    row. Among several matches the one closest to the importer wins (its own
+    subtree before a sibling's), then the more specific; a tie resolves to
+    nothing. A `Dependency` concept is a manifest entry, not a module, so it is
+    never a target — otherwise `import x` would land on any sibling's
+    `_dependencies/.../x.md`.
+
+    Two more rules keep bare names honest, both checked against a real
+    multi-codebase bundle. A standard-library module (`uuid`, `os`) is never
+    looked up: some codebase will have a file of that name and it is never the
+    target. And a single-segment name (`import httpx`, `from pytest import x`)
+    may cross into another codebase only where it is a *top-level package*
+    there (`httpx/__init__.md` exists and the directory above is not itself a
+    package) — a bare module file nested somewhere, or a sub-package that
+    happens to be named `pydantic`, is not importable by that name from
+    outside, so a match on it is a coincidence. Multi-segment names (`a.b`)
+    carry their own evidence and cross freely.
+    """
+    # ponytail: suffix matching, no package->subtree map; add one if a name
+    # shared by two sibling codebases ever needs to resolve.
+    by_suffix: dict = {}
+    codebase = {}
+    for c in b.concepts:
+        codebase[c.path] = _codebase(c)
+        if c.type == "Dependency":
+            continue
+        parts = c.path.split("/")
+        for i in range(len(parts)):
+            by_suffix.setdefault("/".join(parts[i:]), []).append(c.path)
+    out = []
+    for c in b.concepts:
+        stmts = extract_imports(c.body) if "## Imports" in c.body else []
+        for stmt in stmts:
+            for label, module, suffixes in _import_targets(stmt):
+                top = module.split(".", 1)[0]
+                if top in sys.stdlib_module_names:
+                    continue
+                single = "." not in module
+                cands = []
+                for rank, s in enumerate(suffixes):
+                    for p in by_suffix.get(s, ()):
+                        if single and codebase[p] != codebase[c.path]:
+                            root = f"{p[:len(p) - len(s)]}{top}"
+                            # a top-level package: has __init__, its parent does not
+                            if f"{root}/__init__.md" not in b.known or \
+                                    f"{os.path.dirname(root)}/__init__.md" in b.known:
+                                continue
+                        cands.append((rank, p))
+                dst = _nearest(c.path, cands) if cands else None
+                if dst is not None and dst != c.path:
+                    out.append({"src_path": c.path, "dst_raw": label,
+                                "dst_path": dst, "resolved": True})
     return out
 
 
@@ -536,6 +673,7 @@ def _insert_many(con, table: str, ncols: int, rows: list) -> None:
 def _ingest_bundle(b, db_path, ingested_at, incremental=False):
     val = validate(b)
     lk = links(b)
+    il = import_links(b)
     if ingested_at is None:
         ingested_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -583,7 +721,7 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
     con.execute("DELETE FROM okf_validation WHERE bundle_id = ?", [bid])
     _insert_many(con, "okf_link", 5,
                  [[bid, x["src_path"], x["dst_raw"], x["dst_path"], x["resolved"]]
-                  for x in lk])
+                  for x in lk + il])
     _insert_many(con, "okf_validation", 5,
                  [[bid, f["path"], f["severity"], f["rule"], f["message"]] for f in val])
 
@@ -593,6 +731,7 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
         "errors": sum(1 for f in val if f["severity"] == "error"),
         "warnings": sum(1 for f in val if f["severity"] == "warn"),
         "links_total": len(lk), "links_broken": sum(1 for x in lk if not x["resolved"]),
+        "import_links": len(il),
         **inc_stats,
     }
     return con, summary

@@ -1,0 +1,14 @@
+{
+  "_note": "Added by Foodini 2026-10-13. `## Imports` bullets become resolved okf_link rows; markdown-link counts are untouched by them. Of app-b/src/main.md's twelve statements: `import os`, `import uuid` and `from uuid import UUID` are standard library and never looked up, even though lib-a has a module file named uuid; `slugify` resolves to the Function page and `VERSION`, which has no page of its own, falls back to the module; `import toolkit` is a bare name that crosses codebases because lib-a has it as a top-level package (__init__ page, parent is not a package); `src.common.helper` exists in both app-b and lib-a and the importer's own subtree wins; `shared.thing` exists in lib-a and lib-c at equal distance, so the tie resolves to nothing; the relative import yields nothing; `config.instance` has a more specific match in lib-a but app-b's own config module is nearer and wins; `cachetools` matches only a Dependency page, which is never a target; `import pytest` is a bare name whose only match is a workflow file in lib-c, not a package; `from pydantic import BaseModel` matches only a sub-package nested inside toolkit, which a bare name cannot reach. Both of the last two stay unresolved.",
+  "bundle": { "n_concepts": 14, "conformant": true, "errors": 0, "warnings": 0 },
+  "links": { "total": 14, "broken": 0 },
+  "import_links": 5,
+  "import_rows": [
+    ["app-b/src/main.md", "from config import instance", "app-b/src/config.md"],
+    ["app-b/src/main.md", "from src.common import helper", "app-b/src/common/helper.md"],
+    ["app-b/src/main.md", "from toolkit.util import VERSION", "lib-a/src/toolkit/util.md"],
+    ["app-b/src/main.md", "from toolkit.util import slugify", "lib-a/src/toolkit/util/slugify.md"],
+    ["app-b/src/main.md", "import toolkit", "lib-a/src/toolkit/__init__.md"]
+  ],
+  "slugify_inbound": ["app-b/src/main.md", "index.md"]
+}
