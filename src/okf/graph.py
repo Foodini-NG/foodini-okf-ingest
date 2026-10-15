@@ -1,8 +1,10 @@
 """okf graph affordances (Python).
 
 Modified by Foodini 2026-08-22/23: ppr() no longer re-sorts its edge list on
-every power-iteration pass, and every catalog read is scoped to one bundle. Derived from okf-ingest by Travis Jakel (Apache-2.0) — see
-NOTICE.
+every power-iteration pass, and every catalog read is scoped to one bundle.
+2026-10-15: backlinks() and impact() take `kinds` and `include_tests`; impact
+follows CODE_KINDS (calls + import) and drops test pages by default. Derived
+from okf-ingest by Travis Jakel (Apache-2.0) — see NOTICE.
 
 All DETERMINISTIC; no LLM. The catalog already holds the concept graph
 (okf_link); these surface it for navigation and visualization:
@@ -16,7 +18,7 @@ from __future__ import annotations
 import json, os, re
 from typing import Optional
 
-from .okf import bundle_root, resolve_bundle
+from .okf import CODE_KINDS, DEFAULT_KINDS, bundle_root, edge_rows, resolve_bundle
 
 
 def _esc(s: str) -> str:
@@ -38,27 +40,26 @@ def _adj(con, bundle_id: Optional[str] = None):
     return cps, adj
 
 
-def backlinks(con, path: str, bundle_id: Optional[str] = None) -> list:
-    """Concepts that link to `path` (resolved inbound links), sorted."""
-    return [r[0] for r in con.execute(
-        "SELECT DISTINCT src_path FROM okf_link "
-        "WHERE resolved AND bundle_id = ? AND dst_path = ? ORDER BY src_path",
-        [resolve_bundle(con, bundle_id), path]).fetchall()]
-
-
-def impact(con, path: str, bundle_id: Optional[str] = None) -> dict:
-    """Direct `outbound`, direct `inbound` (backlinks), and `transitive` — every
-    concept that can reach `path` by following resolved links (the ripple)."""
+def backlinks(con, path: str, bundle_id: Optional[str] = None,
+              kinds=None, include_tests: bool = False) -> list:
+    """Concepts that link to `path` (resolved inbound links of `kinds`,
+    DEFAULT_KINDS when None — directory indexes excluded), sorted."""
     bid = resolve_bundle(con, bundle_id)
-    out = [r[0] for r in con.execute(
-        "SELECT DISTINCT dst_path FROM okf_link "
-        "WHERE resolved AND bundle_id = ? AND src_path = ? ORDER BY dst_path",
-        [bid, path]).fetchall()]
-    inb = backlinks(con, path, bundle_id=bid)
+    return sorted({s for s, d in edge_rows(con, bid, kinds, include_tests) if d == path})
+
+
+def impact(con, path: str, bundle_id: Optional[str] = None,
+           kinds=CODE_KINDS, include_tests: bool = False) -> dict:
+    """Direct `outbound`, direct `inbound` (backlinks), and `transitive` — every
+    concept that can reach `path` by following edges of `kinds` in reverse (the
+    ripple). Defaults to CODE_KINDS (calls + import) with test pages dropped:
+    the union of every link once answered 17k nodes for anything."""
+    bid = resolve_bundle(con, bundle_id)
+    rows = edge_rows(con, bid, kinds, include_tests)
+    out = sorted({d for s, d in rows if s == path})
+    inb = sorted({s for s, d in rows if d == path})
     radj = {}
-    for s, d in con.execute(
-            "SELECT src_path, dst_path FROM okf_link WHERE resolved AND bundle_id = ?",
-            [bid]).fetchall():
+    for s, d in rows:
         radj.setdefault(d, []).append(s)
     seen, frontier = set(), [path]
     while frontier:
@@ -68,7 +69,8 @@ def impact(con, path: str, bundle_id: Optional[str] = None) -> dict:
                 if s not in seen and s != path:
                     seen.add(s); nxt.append(s)
         frontier = nxt
-    return {"path": path, "outbound": out, "inbound": inb, "transitive": sorted(seen)}
+    return {"path": path, "kinds": list(kinds or DEFAULT_KINDS), "include_tests": include_tests,
+            "outbound": out, "inbound": inb, "transitive": sorted(seen)}
 
 
 def clusters(con, max_iter: int = 50, include_reserved: bool = False,

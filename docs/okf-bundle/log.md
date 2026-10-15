@@ -8,6 +8,15 @@ tags: [log]
 
 # Change log
 
+- **2026-10-15** Typed edges. `okf_link.kind` (link | related | calls | import |
+  index) is read from the Relationships-table row a link sits in; `called_by`
+  rows are the reverse of `calls` and are dropped at ingest. `backlinks`,
+  `impact` and `context` take `kinds` and `include_tests` (test pages by path,
+  off by default); `impact` follows calls + import in reverse. Existing catalogs
+  gain the column in place (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). The
+  `kinds` conformance fixture pins the kinds, the dropped reverse rows, the
+  default and opt-in walks, and the in-place migration. `twobundles` and
+  `imports` expectations lost their `index.md` backlink deliberately.
 - **2026-10-13** Import statements become edges. A `## Imports` section (as
   okf-generator renders one) is resolved name by name to the concept whose path
   ends with the dotted module path, and stored in `okf_link` as a resolved edge

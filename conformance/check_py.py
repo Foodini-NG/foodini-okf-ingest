@@ -5,6 +5,7 @@ Run: python conformance/check_py.py  (exit 0 = pass).
 Modified by Foodini 2026-08-22: the binding now lives in src/ rather than py/.
 Derived from okf-ingest by Travis Jakel (Apache-2.0) - see NOTICE."""
 import os, sys, json, shutil, tempfile
+import duckdb
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import okf.okf as okf
 
@@ -195,8 +196,8 @@ for _name, _bid in sorted(_ids.items()):
     _want_in = _pb["shared_inbound"][_name]
     check(f"two.{_name}.shared_inbound",
           okf_backlinks(_tc, "shared.md", bundle_id=_bid), _want_in)
-    check(f"two.{_name}.shared_impact_inbound",
-          okf_impact(_tc, "shared.md", bundle_id=_bid)["inbound"], _want_in)
+    check(f"two.{_name}.shared_impact_inbound",     # same kinds as backlinks -> same answer
+          okf_impact(_tc, "shared.md", bundle_id=_bid, kinds=okf.DEFAULT_KINDS)["inbound"], _want_in)
     check(f"two.{_name}.graph_nodes",
           len(json.loads(okf_graph_json(_tc, bundle_id=_bid))["nodes"]), _pb["graph_nodes"])
     _rep = okf_doctor(_tc, bundle_id=_bid)
@@ -275,13 +276,53 @@ check("imports.links_broken", si["links_broken"], expi["links"]["broken"])
 check("imports.import_links", si["import_links"], expi["import_links"])
 _rows = [list(r) for r in coni.execute(
     "SELECT src_path, dst_raw, dst_path FROM okf_link WHERE resolved "
-    "AND (dst_raw LIKE 'import %' OR dst_raw LIKE 'from %') ORDER BY 1, 2").fetchall()]
+    "AND kind = 'import' ORDER BY 1, 2").fetchall()]
 check("imports.rows", _rows, expi["import_rows"])
 check("imports.unresolved_rows",        # no row for os / shared.thing / .local
       coni.execute("SELECT count(*) FROM okf_link WHERE NOT resolved").fetchone()[0], 0)
 check("imports.backlinks_see_them",     # the graph helpers read the same table
       okf_backlinks(coni, "lib-a/src/toolkit/util/slugify.md"), expi["slugify_inbound"])
 coni.close()
+
+# --- kinds: every edge carries its kind; called_by is never stored; walks filter ---
+# Added by Foodini 2026-10-15. With every link the same row, impact() returned
+# the same 17k-node set for a shared table and for an obscure test helper.
+expk = json.load(open(os.path.join(HERE, "expected", "kinds.json")))
+conk, sk = okf.ingest(os.path.join(HERE, "bundles", "kinds"))
+check("kinds.links_total", sk["links_total"], expk["links_total"])
+check("kinds.import_links", sk["import_links"], expk["import_links"])
+check("kinds.counts", dict(conk.execute(
+    "SELECT kind, count(*) FROM okf_link GROUP BY kind ORDER BY kind").fetchall()), expk["kind_counts"])
+check("kinds.no_called_by_rows",
+      conk.execute("SELECT count(*) FROM okf_link WHERE kind = 'called_by' OR kind IS NULL").fetchone()[0], 0)
+_imp_b = okf_impact(conk, "src/b.md")
+check("kinds.impact_b_default", {k: _imp_b[k] for k in ("inbound", "outbound", "transitive")},
+      expk["impact_b_default"])
+check("kinds.impact_b_kinds_echoed", _imp_b["kinds"], list(okf.CODE_KINDS))
+check("kinds.impact_a_default_inbound", okf_impact(conk, "src/a.md")["inbound"], expk["impact_a_default_inbound"])
+check("kinds.impact_a_with_tests_inbound",
+      okf_impact(conk, "src/a.md", include_tests=True)["inbound"], expk["impact_a_with_tests_inbound"])
+check("kinds.backlinks_a_default", okf_backlinks(conk, "src/a.md"), expk["backlinks_a_default"])
+check("kinds.backlinks_a_all_kinds",
+      okf_backlinks(conk, "src/a.md", kinds=("link", "related", "calls", "import", "index")),
+      expk["backlinks_a_all_kinds"])
+check("kinds.context_code_only",
+      sorted(okf.context(conk, start="src/b.md", depth=2, kinds=okf.CODE_KINDS)["included"]),
+      expk["context_code_only"])
+conk.close()
+
+# an existing five-column catalog must gain `kind` on its next ingest, in place
+_mig = os.path.join(tempfile.mkdtemp(), "old.duckdb")
+_mc = duckdb.connect(_mig)
+_mc.execute("CREATE TABLE okf_link (bundle_id TEXT, src_path TEXT, dst_raw TEXT, "
+            "dst_path TEXT, resolved BOOLEAN)")
+_mc.close()
+_mc, _ = okf.ingest(os.path.join(HERE, "bundles", "kinds"), db_path=_mig)
+check("kinds.migration_adds_column",
+      [r[0] for r in _mc.execute("DESCRIBE okf_link").fetchall()][-1], "kind")
+check("kinds.migration_fills_column",
+      _mc.execute("SELECT count(*) FROM okf_link WHERE kind IS NULL").fetchone()[0], 0)
+_mc.close()
 
 # --- diff (deterministic concept-level changelog between two bundle states) ---
 from okf.diff import diff as okf_diff  # noqa: E402

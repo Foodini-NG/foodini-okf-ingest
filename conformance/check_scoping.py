@@ -65,7 +65,7 @@ for name in sorted(os.listdir(SRC)):
             continue
         flat = " ".join(sql.split())
         verb = flat.split(" ", 1)[0].upper()
-        if verb in ("CREATE", "DROP", "INSERT"):
+        if verb in ("CREATE", "DROP", "INSERT", "ALTER"):
             # DDL is bundle-agnostic; INSERT supplies bundle_id as a value.
             continue
         checked += 1

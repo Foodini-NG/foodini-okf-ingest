@@ -57,7 +57,7 @@ none re-parses the bundle:
 | Semantic | `okf_rag` / `rag` | `okf_chunk` (embeddings) | top-k chunks |
 | Context | `okf_context` / `context` | `okf_concept` + `okf_link` | index-first markdown blob for an LLM |
 | Render | `okf_html` / `render_html` | `okf_concept` + `okf_validation` + `okf_link` | static HTML (site or single file) |
-| Graph | `okf_graph_html` / `okf_graph_json` / `okf_backlinks` / `okf_impact` / `okf_clusters` | `okf_concept` + `okf_link` | force-directed page · `{nodes,edges}` JSON · backlinks · ripple · communities |
+| Graph | `okf_graph_html` / `okf_graph_json` / `okf_backlinks` / `okf_impact` / `okf_clusters` | `okf_concept` + `okf_link` (typed: `kind`) | force-directed page · `{nodes,edges}` JSON · backlinks · ripple over calls + import, tests dropped · communities |
 
 All **deterministic** — no LLM, no model calls. Community detection is
 synchronous label propagation with lexicographic tie-breaking (reproducible);

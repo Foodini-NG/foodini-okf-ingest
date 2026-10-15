@@ -7,8 +7,11 @@ instead of one execute() per row; and findings can be filtered and
 summarised (filter_findings / summarize_findings); and catalog reads are
 scoped to one bundle (resolve_bundle). 2026-10-13: import statements listed
 under a `## Imports` heading become resolved edges in okf_link (import_links),
-so a bundle holding several codebases gets cross-codebase edges. Derived from
-okf-ingest by Travis Jakel (Apache-2.0) — see NOTICE.
+so a bundle holding several codebases gets cross-codebase edges. 2026-10-15:
+every okf_link row carries a `kind` (link | related | calls | import | index;
+`called_by` rows are the reverse of `calls` and are not stored), test pages are
+recognised by path (is_test), and the graph walks take `kinds` / `include_tests`.
+Derived from okf-ingest by Travis Jakel (Apache-2.0) — see NOTICE.
 
 Writes a catalog against schema/catalog.sql, the interop contract, so a bundle
 ingested here yields a catalog any conformant implementation can read — including
@@ -47,7 +50,17 @@ _OKFLoader.yaml_implicit_resolvers = {
     for k, v in yaml.SafeLoader.yaml_implicit_resolvers.items()
 }
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
-_LINK = re.compile(r"\]\(\s*([^)\s]+)")
+# A markdown link, optionally preceded on the same line by the generator's
+# Relationships-table row prefix, which names the edge kind:
+#   | calls | [label](/path.md) |
+_LINK = re.compile(r"(?:^\| (related(?: \(AI\))?|calls|called_by) \| \[[^\]]*)?\]\(\s*([^)\s]+)", re.M)
+# Test pages by path. The same literal lives in foodini-quality-manager's
+# server/queries.py, which has no dependency on this package.
+TEST_PATH = re.compile(r"(^|/)(tests?|__tests__|spec|__mocks__)/|\.(test|spec)\.|(^|/)test_")
+# Edge kinds. DEFAULT_KINDS is everything a reader follows by default (no
+# directory-index navigation); CODE_KINDS is what a change can actually hit.
+DEFAULT_KINDS = ("link", "related", "calls", "import")
+CODE_KINDS = ("calls", "import")
 _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 _SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 _IMPORTS_SECTION = re.compile(r"^## Imports\s*$(.*?)(?=^## |\Z)", re.M | re.S)
@@ -63,7 +76,8 @@ CREATE TABLE IF NOT EXISTS okf_concept (bundle_id TEXT, path TEXT, reserved BOOL
   body TEXT, frontmatter TEXT, parse_error TEXT, content_hash TEXT,
   PRIMARY KEY (bundle_id, path));
 CREATE TABLE IF NOT EXISTS okf_link (bundle_id TEXT, src_path TEXT, dst_raw TEXT,
-  dst_path TEXT, resolved BOOLEAN);
+  dst_path TEXT, resolved BOOLEAN, kind TEXT);
+ALTER TABLE okf_link ADD COLUMN IF NOT EXISTS kind TEXT;
 CREATE TABLE IF NOT EXISTS okf_validation (bundle_id TEXT, path TEXT, severity TEXT,
   rule TEXT, message TEXT);
 CREATE TABLE IF NOT EXISTS okf_chunk (bundle_id TEXT, path TEXT, chunk_id INTEGER,
@@ -146,7 +160,13 @@ def parse_file(path: str) -> dict:
 
 
 def extract_links(body: str) -> list:
-    return _LINK.findall(body)
+    """[(target, row_type)] — row_type is 'calls' / 'called_by' / 'related' /
+    'related (AI)' when the link sits in a Relationships-table row, else ''."""
+    return [(target, rtype) for rtype, target in _LINK.findall(body)]
+
+
+def is_test(path: str) -> bool:
+    return bool(TEST_PATH.search(path))
 
 
 def extract_wikilinks(body: str) -> list:
@@ -266,16 +286,18 @@ def links(b: Bundle) -> list:
     out = []
     idx = _wiki_index(b.concepts)
     for c in b.concepts:
-        for raw in c.links_raw:
-            if _is_external(raw):
-                continue
+        nav = "index" if os.path.basename(c.path) == "index.md" else "link"
+        for raw, rtype in c.links_raw:
+            if _is_external(raw) or rtype == "called_by":
+                continue          # called_by is the reverse of a calls row on the other page
+            kind = "related" if rtype.startswith("related") else (rtype or nav)
             dst = resolve_link(raw, c.path, b.known)
             out.append({"src_path": c.path, "dst_raw": raw,
-                        "dst_path": dst, "resolved": dst is not None})
+                        "dst_path": dst, "resolved": dst is not None, "kind": kind})
         for raw in c.wikilinks_raw:
             dst = resolve_wiki(raw, idx, b.known)
             out.append({"src_path": c.path, "dst_raw": raw,
-                        "dst_path": dst, "resolved": dst is not None})
+                        "dst_path": dst, "resolved": dst is not None, "kind": nav})
     return out
 
 
@@ -407,7 +429,7 @@ def import_links(b: Bundle) -> list:
                 dst = _nearest(c.path, cands) if cands else None
                 if dst is not None and dst != c.path:
                     out.append({"src_path": c.path, "dst_raw": label,
-                                "dst_path": dst, "resolved": True})
+                                "dst_path": dst, "resolved": True, "kind": "import"})
     return out
 
 
@@ -719,8 +741,8 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
                  len(non_reserved), n_conf, len(err_paths) == 0])
     con.execute("DELETE FROM okf_link WHERE bundle_id = ?", [bid])
     con.execute("DELETE FROM okf_validation WHERE bundle_id = ?", [bid])
-    _insert_many(con, "okf_link", 5,
-                 [[bid, x["src_path"], x["dst_raw"], x["dst_path"], x["resolved"]]
+    _insert_many(con, "okf_link", 6,
+                 [[bid, x["src_path"], x["dst_raw"], x["dst_path"], x["resolved"], x["kind"]]
                   for x in lk + il])
     _insert_many(con, "okf_validation", 5,
                  [[bid, f["path"], f["severity"], f["rule"], f["message"]] for f in val])
@@ -735,6 +757,18 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
         **inc_stats,
     }
     return con, summary
+
+
+def edge_rows(con, bundle_id: str, kinds=None, include_tests: bool = False) -> list:
+    """Resolved (src, dst) pairs of the given kinds (DEFAULT_KINDS when None),
+    with edges touching a test page dropped unless asked for."""
+    rows = con.execute(
+        "SELECT src_path, dst_path FROM okf_link WHERE resolved AND bundle_id = ? "
+        "AND kind IN (SELECT unnest(?::VARCHAR[])) ORDER BY src_path, dst_path",
+        [bundle_id, list(kinds or DEFAULT_KINDS)]).fetchall()
+    if include_tests:
+        return rows
+    return [(s_, d) for s_, d in rows if not (is_test(s_) or is_test(d))]
 
 
 def resolve_bundle(con, bundle_id: Optional[str] = None) -> str:
@@ -795,7 +829,7 @@ def _bfs_select(cps, adj, nonres, start, depth):
 
 def context(con, start=None, depth: int = 1, max_tokens: int = 8000,
             include_index: bool = True, rank: str = "bfs", query=None,
-            bundle_id: Optional[str] = None):
+            bundle_id: Optional[str] = None, kinds=None, include_tests: bool = False):
     """Assemble an index-first, link-following slice of a bundle as one markdown
     blob for direct LLM consumption — the OKF / "LLM wiki" consume primitive.
     Uses the concept graph (no embeddings, no vector search). With `start`, walks
@@ -807,9 +841,7 @@ def context(con, start=None, depth: int = 1, max_tokens: int = 8000,
         "SELECT path, reserved, title, body FROM okf_concept WHERE bundle_id = ?",
         [bid]).fetchall()}
     adj = {}
-    for s, d in con.execute(
-            "SELECT src_path, dst_path FROM okf_link WHERE resolved AND bundle_id = ?",
-            [bid]).fetchall():
+    for s, d in edge_rows(con, bid, kinds, include_tests):
         adj.setdefault(s, set()).add(d)
         adj.setdefault(d, set()).add(s)
     nonres = [p for p, v in cps.items() if not v["reserved"]]

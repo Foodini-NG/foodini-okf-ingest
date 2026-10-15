@@ -1,0 +1,12 @@
+{
+  "_note": "Added by Foodini 2026-10-15. Every okf_link row carries a kind read from the Relationships-table row it sits in; called_by rows are the reverse of calls and are never stored; links in a directory index.md are 'index'; import statements are 'import'. links_total counts markdown links only (12: two in the root index, four in src/index.md, one plain link in c.md, and five Relationships rows, of which the called_by row is dropped so 13 rows minus... see kind_counts). impact follows calls+import in reverse and drops test pages: b is reached only by a; a's only callers are a test (dropped by default) and nothing else. backlinks follows everything but index by default, so a has none until index edges are asked for. context over CODE_KINDS from b reaches a and, through a's import, thing.",
+  "links_total": 12,
+  "import_links": 1,
+  "kind_counts": {"calls": 3, "import": 1, "index": 6, "link": 1, "related": 2},
+  "impact_b_default": {"inbound": ["src/a.md"], "outbound": [], "transitive": ["src/a.md"]},
+  "impact_a_default_inbound": [],
+  "impact_a_with_tests_inbound": ["tests/test_a.md"],
+  "backlinks_a_default": [],
+  "backlinks_a_all_kinds": ["src/index.md"],
+  "context_code_only": ["src/a.md", "src/b.md", "src/c/thing.md"]
+}
