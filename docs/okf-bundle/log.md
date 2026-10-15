@@ -8,6 +8,11 @@ tags: [log]
 
 # Change log
 
+- **2026-10-15** Cross-codebase call edges and TS imports. Callees under a
+  page's `## Calls (unresolved)` resolve through its module's imports (aliases
+  included, methods via the grandparent module) into `calls` edges; JS/TS
+  relative import specifiers resolve against the importer's directory. The
+  `ingest` summary gains `call_links`. Pinned by the `calls` fixture.
 - **2026-10-15** Typed edges. `okf_link.kind` (link | related | calls | import |
   index) is read from the Relationships-table row a link sits in; `called_by`
   rows are the reverse of `calls` and are dropped at ingest. `backlinks`,

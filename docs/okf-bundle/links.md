@@ -36,6 +36,17 @@ change can actually hit. Both take `kinds` and `include_tests`; test pages
 (recognised by path: `tests/`, `test_*`, `*.test.*`, `*.spec.*`) are dropped by
 default. An existing catalog gains the column on its next ingest.
 
+## Call edges across codebases
+
+A function page may list, under `## Calls (unresolved)`, the callees its own
+generator could not pin inside its codebase. Each is resolved through the
+import statements of the page's module (its parent page, or grandparent for a
+method): `from toolkit.util import slugify as slug` plus a call to `slug`, or
+`import toolkit.util as tu` plus `tu.slugify`, lands on the slugify page
+wherever it lives, as a `calls` edge. Standard-library and unbound names
+(`self.repo.save`) yield nothing. The same proximity and package rules as
+imports apply.
+
 ## Import edges
 
 A concept may list import statements under a `## Imports` heading, one per
@@ -45,6 +56,11 @@ with the dotted module path — `pkg/mod/name.md`, then `pkg/mod/__init__/name.m
 then the module page itself — and stored in `okf_link` as a resolved edge whose
 `dst_raw` is the statement. So a bundle that holds several codebases side by
 side gets edges between them, which a per-codebase call graph cannot provide.
+
+A JavaScript/TypeScript statement (`import { fmt as format } from "../lib/text"`)
+resolves only a relative specifier, against the importer's directory — a named
+import to its symbol page, a default or namespace import to the module page. A
+bare package specifier points at node_modules, which no bundle documents.
 
 Only resolved edges are stored: an import of the standard library or of a
 package outside the bundle is not a broken link, so it is neither a row nor a

@@ -25,6 +25,7 @@ Public API:
     summarize_findings(findings) -> dict (counts by severity / rule / path prefix)
     links(bundle)                -> list[Link]
     import_links(bundle)         -> list[Link] (resolved only, from `## Imports` sections)
+    call_links(bundle)           -> list[Link] (resolved only, `## Calls (unresolved)` via imports)
     ingest(root, db_path)        -> (duckdb.Connection, summary dict)
     search(con, term)            -> rows
 """
@@ -65,6 +66,9 @@ _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 _SCHEME = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 _IMPORTS_SECTION = re.compile(r"^## Imports\s*$(.*?)(?=^## |\Z)", re.M | re.S)
 _IMPORT_LINE = re.compile(r"^- `(import|from) ([^`]+)`\s*$", re.M)
+_CALLS_SECTION = re.compile(r"^## Calls \(unresolved\)\s*$(.*?)(?=^## |\Z)", re.M | re.S)
+_CALL_LINE = re.compile(r"^- `([^`]+)`\s*$", re.M)
+_TS_IMPORT = re.compile(r"^import\s+(?:type\s+)?(.*?)\s+from\s+[\"']([^\"']+)[\"'];?$")
 
 # Mirror of schema/catalog.sql (that file is canonical; keep in sync).
 SCHEMA = """
@@ -310,9 +314,32 @@ def extract_imports(body: str) -> list:
     return [f"{kw} {rest.strip()}" for kw, rest in _IMPORT_LINE.findall(m.group(1))]
 
 
-def _import_targets(stmt: str) -> list:
+def _ts_names(clause: str) -> list:
+    """Imported local names from a JS/TS import clause: `React, { a, b as c }`
+    -> [(local, exported)]; `* as ns` -> [("ns", None)] (the module itself)."""
+    out = []
+    clause = clause.strip()
+    m = re.match(r"\*\s+as\s+(\w+)", clause)
+    if m:
+        return [(m.group(1), None)]
+    braces = re.search(r"\{(.*?)\}", clause, re.S)
+    if braces:
+        for part in braces.group(1).split(","):
+            part = part.replace("type ", "").strip()
+            if part:
+                exp, _, loc = part.partition(" as ")
+                out.append(((loc or exp).strip(), exp.strip()))
+        clause = (clause[:braces.start()] + clause[braces.end():]).strip(" ,")
+    if clause:
+        out.append((clause.split(",")[0].strip(), "default"))
+    return [(l, e) for l, e in out if l]
+
+
+def _import_targets(stmt: str, src_path: str = "") -> list:
     """(label, module, [candidate path suffixes, most specific first]) per
-    imported name.
+    imported name. A JS/TS statement (`import { a } from "./x"`) resolves only
+    a relative specifier, against the importer's own directory: a bare package
+    name points at node_modules, which no bundle documents.
 
     `from a.b import x as y` -> a/b/x.md, a/b/__init__/x.md, then the module
     itself (a/b.md, a/b/__init__.md) when x is not a concept of its own, e.g. a
@@ -320,6 +347,21 @@ def _import_targets(stmt: str) -> list:
     nothing: they never leave their own subtree, and the generator's call graph
     already covers that."""
     kw, _, rest = stmt.partition(" ")
+    ts = _TS_IMPORT.match(stmt.strip())
+    if ts:
+        spec = ts.group(2)
+        if not spec.startswith("."):
+            return []
+        base = _norm(os.path.join(os.path.dirname(src_path), spec))
+        out = []
+        for local, exported in _ts_names(ts.group(1)):
+            if exported is None or exported == "default":
+                out.append((f"import {local} from \"{spec}\"", base,
+                            [f"{base}.md", f"{base}/index.md"]))
+            else:
+                out.append((f"import {exported} from \"{spec}\"", base,
+                            [f"{base}/{exported}.md", f"{base}.md"]))
+        return out
     rest = rest.split("#", 1)[0].strip().strip("()")
     out = []
     if kw == "import":
@@ -371,6 +413,128 @@ def _nearest(src: str, cands: list) -> Optional[str]:
     return ranked[0][1]
 
 
+class _Index:
+    """Suffix index over concept paths (Dependency pages excluded) plus each
+    concept's codebase; shared by import_links and call_links."""
+
+    def __init__(self, b: Bundle):
+        self.b = b
+        self.by_suffix: dict = {}
+        self.codebase: dict = {}
+        for c in b.concepts:
+            self.codebase[c.path] = _codebase(c)
+            if c.type == "Dependency":
+                continue
+            parts = c.path.split("/")
+            for i in range(len(parts)):
+                self.by_suffix.setdefault("/".join(parts[i:]), []).append(c.path)
+
+    def resolve(self, src_path: str, module: str, suffixes: list) -> Optional[str]:
+        """The concept a dotted module (+ suffix candidates) means from src_path,
+        under the stdlib / top-level-package / proximity rules, or None."""
+        top = module.split(".", 1)[0]
+        if top in sys.stdlib_module_names:
+            return None
+        single = "." not in module and "/" not in module
+        cands = []
+        for rank, s in enumerate(suffixes):
+            for p in self.by_suffix.get(s, ()):
+                if single and self.codebase[p] != self.codebase[src_path]:
+                    root = f"{p[:len(p) - len(s)]}{top}"
+                    # a top-level package: has __init__, its parent does not
+                    if f"{root}/__init__.md" not in self.b.known or \
+                            f"{os.path.dirname(root)}/__init__.md" in self.b.known:
+                        continue
+                cands.append((rank, p))
+        dst = _nearest(src_path, cands) if cands else None
+        return dst if dst is not None and dst != src_path else None
+
+
+def _import_map(stmts: list) -> dict:
+    """local name -> (module, symbol-or-None) from a module's import statements.
+    `from m import a as b` -> b: (m, a); `import m.n as x` -> x: (m.n, None);
+    `import m.n` -> m: (m, None). Relative and JS imports are skipped."""
+    out = {}
+    for stmt in stmts:
+        if _TS_IMPORT.match(stmt.strip()):
+            continue
+        kw, _, rest = stmt.partition(" ")
+        rest = rest.split("#", 1)[0].strip().strip("()")
+        if kw == "import":
+            for mod in rest.split(","):
+                mod, _, alias = mod.strip().partition(" as ")
+                if mod and not mod.startswith("."):
+                    out[(alias or mod.split(".", 1)[0]).strip()] = (mod.strip() if alias else mod.split(".", 1)[0], None)
+        elif kw == "from":
+            mod, _, names = rest.partition(" import ")
+            mod = mod.strip()
+            if mod.startswith(".") or not names:
+                continue
+            for name in names.split(","):
+                name, _, alias = name.strip().partition(" as ")
+                if name and name != "*":
+                    out[(alias or name).strip()] = (mod, name.strip())
+    return out
+
+
+def call_links(b: Bundle) -> list:
+    """Edges from `## Calls (unresolved)` sections — the callees the generator
+    could not pin inside one codebase — resolved through the caller's module
+    imports: `from toolkit.util import slugify as slug` plus a call to `slug`
+    lands on toolkit/util/slugify.md wherever it lives. Same rules as
+    import_links; only resolved edges are returned, kind `calls`.
+    """
+    idx = _Index(b)
+    bodies = {c.path: c.body for c in b.concepts}
+    imports_of: dict = {}
+
+    def module_imports(path: str) -> dict:
+        """The import map of the page's module: parent for a function, grand-
+        parent for a method; cached per module page."""
+        d = path
+        for _ in range(3):
+            d = os.path.dirname(d)
+            if not d:
+                break
+            mp = d + ".md"
+            if mp in bodies and "## Imports" in (bodies[mp] or ""):
+                if mp not in imports_of:
+                    imports_of[mp] = _import_map(extract_imports(bodies[mp]))
+                return imports_of[mp]
+        return {}
+
+    out, seen = [], set()
+    for c in b.concepts:
+        if "## Calls (unresolved)" not in (c.body or ""):
+            continue
+        m = _CALLS_SECTION.search(c.body)
+        if not m:
+            continue
+        imap = module_imports(c.path)
+        if not imap:
+            continue
+        for callee in _CALL_LINE.findall(m.group(1)):
+            head, *rest = callee.split(".")
+            bound = imap.get(head)
+            if bound is None:
+                continue
+            module, symbol = bound
+            parts = ([symbol] if symbol else []) + rest
+            if not parts:
+                continue
+            d = module.replace(".", "/")
+            join = "/".join(parts)
+            suffixes = [f"{d}/{join}.md", f"{d}/__init__/{join}.md"]
+            if len(parts) > 1:
+                suffixes.append(f"{d}/{parts[0]}.md")
+            dst = idx.resolve(c.path, module, suffixes)
+            if dst is not None and (c.path, callee, dst) not in seen:
+                seen.add((c.path, callee, dst))
+                out.append({"src_path": c.path, "dst_raw": callee,
+                            "dst_path": dst, "resolved": True, "kind": "calls"})
+    return out
+
+
 def import_links(b: Bundle) -> list:
     """Edges from `## Imports` sections. Each imported name is resolved to the
     concept whose path ends with the dotted module path (see _import_targets),
@@ -398,36 +562,14 @@ def import_links(b: Bundle) -> list:
     """
     # ponytail: suffix matching, no package->subtree map; add one if a name
     # shared by two sibling codebases ever needs to resolve.
-    by_suffix: dict = {}
-    codebase = {}
-    for c in b.concepts:
-        codebase[c.path] = _codebase(c)
-        if c.type == "Dependency":
-            continue
-        parts = c.path.split("/")
-        for i in range(len(parts)):
-            by_suffix.setdefault("/".join(parts[i:]), []).append(c.path)
+    idx = _Index(b)
     out = []
     for c in b.concepts:
         stmts = extract_imports(c.body) if "## Imports" in c.body else []
         for stmt in stmts:
-            for label, module, suffixes in _import_targets(stmt):
-                top = module.split(".", 1)[0]
-                if top in sys.stdlib_module_names:
-                    continue
-                single = "." not in module
-                cands = []
-                for rank, s in enumerate(suffixes):
-                    for p in by_suffix.get(s, ()):
-                        if single and codebase[p] != codebase[c.path]:
-                            root = f"{p[:len(p) - len(s)]}{top}"
-                            # a top-level package: has __init__, its parent does not
-                            if f"{root}/__init__.md" not in b.known or \
-                                    f"{os.path.dirname(root)}/__init__.md" in b.known:
-                                continue
-                        cands.append((rank, p))
-                dst = _nearest(c.path, cands) if cands else None
-                if dst is not None and dst != c.path:
+            for label, module, suffixes in _import_targets(stmt, c.path):
+                dst = idx.resolve(c.path, module, suffixes)
+                if dst is not None:
                     out.append({"src_path": c.path, "dst_raw": label,
                                 "dst_path": dst, "resolved": True, "kind": "import"})
     return out
@@ -696,6 +838,7 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
     val = validate(b)
     lk = links(b)
     il = import_links(b)
+    cl = call_links(b)
     if ingested_at is None:
         ingested_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -743,7 +886,7 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
     con.execute("DELETE FROM okf_validation WHERE bundle_id = ?", [bid])
     _insert_many(con, "okf_link", 6,
                  [[bid, x["src_path"], x["dst_raw"], x["dst_path"], x["resolved"], x["kind"]]
-                  for x in lk + il])
+                  for x in lk + il + cl])
     _insert_many(con, "okf_validation", 5,
                  [[bid, f["path"], f["severity"], f["rule"], f["message"]] for f in val])
 
@@ -754,6 +897,7 @@ def _ingest_bundle(b, db_path, ingested_at, incremental=False):
         "warnings": sum(1 for f in val if f["severity"] == "warn"),
         "links_total": len(lk), "links_broken": sum(1 for x in lk if not x["resolved"]),
         "import_links": len(il),
+        "call_links": len(cl),
         **inc_stats,
     }
     return con, summary

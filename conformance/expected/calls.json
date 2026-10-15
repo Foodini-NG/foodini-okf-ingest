@@ -1,0 +1,17 @@
+{
+  "_note": "Added by Foodini 2026-10-15. Callees listed under `## Calls (unresolved)` resolve through the caller's module imports: `slug` is bound by `from toolkit.util import slugify as slug`, `tu.slugify` by `import toolkit.util as tu`; both land on lib-a's slugify page; a method (Svc/run) finds its module two levels up; `os.path.join` is stdlib and `self.repo.save` is unbound, so neither yields a row. TS: relative specifiers resolve against the importer's directory (`fmt` to its function page, `Opts` and `* as text` to the module page); the bare `react` import yields nothing.",
+  "links_total": 8,
+  "import_links": 5,
+  "call_links": 3,
+  "call_rows": [
+    ["app-b/src/api/Svc/run.md", "slug", "lib-a/src/toolkit/util/slugify.md"],
+    ["app-b/src/api/handler.md", "slug", "lib-a/src/toolkit/util/slugify.md"],
+    ["app-b/src/api/handler.md", "tu.slugify", "lib-a/src/toolkit/util/slugify.md"]
+  ],
+  "ts_import_rows": [
+    ["web-c/src/pages/Home.md", "import Opts from \"../lib/text\"", "web-c/src/lib/text.md"],
+    ["web-c/src/pages/Home.md", "import fmt from \"../lib/text\"", "web-c/src/lib/text/fmt.md"],
+    ["web-c/src/pages/Home.md", "import text from \"../lib/text\"", "web-c/src/lib/text.md"]
+  ],
+  "slugify_impact_inbound": ["app-b/src/api.md", "app-b/src/api/Svc/run.md", "app-b/src/api/handler.md"]
+}
